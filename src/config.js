@@ -17,7 +17,7 @@ export const CONFIG = {
 
   // The main title of your blog (e.g., your name or nickname)
   // 网站主标题 (通常填写您的名字或昵称)
-  SITE_TITLE: '否极泰来',
+  SITE_TITLE: '雅茹',
 
   // The subtitle (displayed next to the title in a smaller font)
   // 英文副标题 (显示在主标题旁，建议用英文以保持设计感)
