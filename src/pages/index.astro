@@ -2,89 +2,126 @@
 // src/pages/index.astro
 import { CONFIG } from '../config';
 
-// 文本处理函数
-const formatNoteText = (text) => {
-    if (!text) return '';
-    let formatted = text
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    formatted = formatted.replace(urlRegex, (url) => {
-        return `<a href="${url}" target="_blank" class="note-link">${url}</a>`;
-    });
-    formatted = formatted.replace(/\n/g, '<br>');
-    return formatted;
-};
+// ==============================================
+// 1. 服务端配置与工具 (Server-Side Logic)
+// ==============================================
 
-// --- 1. 解析联邦账号 ---
+// 解析用户 ID
 const parseHandle = (handle) => {
     const clean = handle.startsWith('@') ? handle.slice(1) : handle;
     const parts = clean.split('@');
-    if (parts.length < 2) return { username: 'error', instance: 'https://sshup.com' };
-    return { username: parts[0], instance: `https://${parts[1]}` };
+    if (parts.length < 2) return { username: 'error', instance: 'https://sshup.com', domain: 'sshup.com' };
+    let domain = parts[1];
+    if (domain.endsWith('/')) domain = domain.slice(0, -1);
+    return { username: parts[0], instance: `https://${domain}`, domain: domain };
 };
-const { username: USER_NAME, instance: INSTANCE_URL } = parseHandle(CONFIG.FEDIVERSE_HANDLE);
 
+const { username: USER_NAME, instance: INSTANCE_URL, domain: DOMAIN } = parseHandle(CONFIG.FEDIVERSE_HANDLE);
+
+// 全局变量
 let mediaNotes = []; 
 let textNotes = [];
 let errorMsg = '';
 let dynamicDesc = CONFIG.SITE_DESC; 
+let platform = 'unknown'; 
+let userId = null; 
 
-// --- 2. 自动获取 User ID ---
-async function fetchUserId() {
+// Mastodon 数据标准化工具
+const normalizeMastodon = (status) => {
+    const note = {
+        id: status.id,
+        createdAt: status.created_at,
+        text: status.content, 
+        isHtml: true,
+        user: {
+            avatarUrl: status.account.avatar,
+            name: status.account.display_name,
+            username: status.account.username,
+            id: status.account.id
+        },
+        files: (status.media_attachments || []).map(m => ({
+            type: m.type, 
+            url: m.url,
+            thumbnailUrl: m.preview_url || m.url,
+            description: m.description 
+        })),
+        replyId: status.in_reply_to_id,
+        replyAccountId: status.in_reply_to_account_id,
+        renote: null
+    };
+    if (status.reblog) {
+        note.renote = normalizeMastodon(status.reblog);
+    }
+    return note;
+};
+
+// 核心抓取函数
+async function fetchFediverseData() {
+    const headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; MisskeyBlog/2.0; +https://github.com/Ghfftn/misskey-blog)"
+    };
+
+    // 1. 尝试 Misskey
     try {
-        const userRes = await fetch(`${INSTANCE_URL}/api/users/show`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+        const mkRes = await fetch(`${INSTANCE_URL}/api/users/show`, {
+            method: "POST", headers: { "Content-Type": "application/json", ...headers },
             body: JSON.stringify({ username: USER_NAME }),
         });
-        if (!userRes.ok) throw new Error('User not found');
-        const userData = await userRes.json();
-        return userData.id;
-    } catch (e) {
-        console.error("Failed to fetch User ID:", e);
-        return null;
+        if (mkRes.ok) {
+            const user = await mkRes.json();
+            userId = user.id;
+            platform = 'misskey';
+        }
+    } catch(e) {}
+
+    // 2. 尝试 Mastodon
+    if (platform === 'unknown') {
+        try {
+            let lookupUrl = `${INSTANCE_URL}/api/v1/accounts/lookup?acct=${USER_NAME}@${DOMAIN}`;
+            let mstdRes = await fetch(lookupUrl, { headers: headers });
+            if (!mstdRes.ok) {
+                lookupUrl = `${INSTANCE_URL}/api/v1/accounts/lookup?acct=${USER_NAME}`;
+                mstdRes = await fetch(lookupUrl, { headers: headers });
+            }
+            if (mstdRes.ok) {
+                const user = await mstdRes.json();
+                userId = user.id;
+                platform = 'mastodon';
+            }
+        } catch(e) {}
+    }
+
+    if (!userId) throw new Error(`User lookup failed`);
+
+    // 3. 抓取内容
+    if (platform === 'misskey') {
+        const res = await fetch(`${INSTANCE_URL}/api/users/notes`, {
+            method: "POST", headers: { "Content-Type": "application/json", ...headers },
+            body: JSON.stringify({ userId: userId, limit: 40, includeReplies: false, includeMyRenotes: true }),
+        });
+        if (!res.ok) throw new Error('Misskey API Error');
+        const raw = await res.json();
+        return raw.map(n => ({ ...n, isHtml: false }));
+
+    } else if (platform === 'mastodon') {
+        const res = await fetch(`${INSTANCE_URL}/api/v1/accounts/${userId}/statuses?limit=40&exclude_replies=true`, { headers: headers });
+        if (!res.ok) throw new Error('Mastodon API Error');
+        const mstdNotes = await res.json();
+        return mstdNotes.map(normalizeMastodon);
     }
 }
 
-try {
-  const userId = await fetchUserId();
-  if (!userId) throw new Error(`找不到用户: ${CONFIG.FEDIVERSE_HANDLE}`);
-
-  const response = await fetch(`${INSTANCE_URL}/api/users/notes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userId: userId,
-      limit: 60,
-      includeReplies: false, 
-      includeMyRenotes: true 
-    }),
-  });
-
-  if (!response.ok) throw new Error('API Error');
-  const allNotes = await response.json();
-
-  if (allNotes && allNotes.length > 0) {
-      const latest = allNotes[0].renote || allNotes[0];
-      let rawText = latest.text || (latest.files.length > 0 ? `[分享了 ${latest.files.length} 张图片]` : '');
-      if (rawText) {
-          rawText = rawText.replace(/\n/g, ' '); 
-          dynamicDesc = rawText.length > 120 ? rawText.substring(0, 117) + '...' : rawText;
-          if (allNotes[0].renote) dynamicDesc = `🔄 转发: ${dynamicDesc}`;
-      }
-  }
-
-  allNotes.forEach(note => {
-    const target = note.renote || note;
-    if (target.replyId) return; 
-    const hasMedia = target.files && target.files.length > 0;
-    if (hasMedia) mediaNotes.push(note);
-    else textNotes.push(note);
-  });
-} catch (e) {
-  errorMsg = `System Offline: ${e.message}`;
-}
+// 文本渲染辅助
+const formatNoteText = (text, isHtml = false) => {
+    if (!text) return '';
+    if (isHtml) return text; 
+    let formatted = text
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    formatted = formatted.replace(urlRegex, (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer" class="note-link">${url}</a>`);
+    return formatted.replace(/\n/g, '<br>');
+};
 
 const formatDate = (isoString) => {
     return new Date(isoString).toLocaleDateString('zh-CN', {
@@ -92,31 +129,54 @@ const formatDate = (isoString) => {
     });
 };
 
-const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
+// ==============================================
+// 2. 数据处理与执行
+// ==============================================
+try {
+  const allNotes = await fetchFediverseData();
+  if (!allNotes || allNotes.length === 0) {
+      errorMsg = 'No public posts found (Server-side)';
+  } else {
+      const latest = allNotes[0].renote || allNotes[0];
+      let rawText = latest.isHtml ? latest.text.replace(/<[^>]+>/g, '') : (latest.text || '');
+      if (!rawText && latest.files.length > 0) rawText = `[Shared ${latest.files.length} images]`;
+      if (rawText) {
+          rawText = rawText.replace(/\n/g, ' '); 
+          dynamicDesc = rawText.length > 120 ? rawText.substring(0, 117) + '...' : rawText;
+      }
+      
+      allNotes.forEach(note => {
+        const target = note.renote || note;
+        if (!target.user) return; 
+        if (target.replyId && target.replyAccountId !== target.user.id) return; 
 
-const marqueeItems = [
-    ...CONFIG.THEME.MARQUEE_TEXT,
-    ...CONFIG.THEME.MARQUEE_TEXT
-];
+        const hasMedia = target.files && target.files.length > 0;
+        if (hasMedia) mediaNotes.push(note);
+        else textNotes.push(note);
+      });
+  }
+} catch (e) {
+  errorMsg = `Server Error: ${e.message}`;
+}
+
+const hasMedia = mediaNotes.length > 0;
+const hasText = textNotes.length > 0;
+const singleColumnMode = !hasMedia || !hasText;
+const PAGE_TITLE = `${CONFIG.SITE_TITLE}`; 
+const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT];
 ---
 
 <html lang="zh-cn">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{PAGE_TITLE}</title>
     <link rel="icon" href={CONFIG.SITE_ICON} />
-    <link rel="alternate" type="application/rss+xml" title="RSS Feed" href="/rss.xml" />
     
     <meta name="description" content={dynamicDesc} />
-    <meta property="og:type" content="website" />
     <meta property="og:title" content={PAGE_TITLE} />
     <meta property="og:description" content={dynamicDesc} />
     <meta property="og:image" content={CONFIG.SITE_ICON} />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content={PAGE_TITLE} />
-    <meta name="twitter:description" content={dynamicDesc} />
-    <meta name="twitter:image" content={CONFIG.SITE_ICON} />
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
@@ -130,189 +190,92 @@ const marqueeItems = [
         userColor: CONFIG.THEME.USERNAME_COLOR,
         textColor: CONFIG.THEME.POST_TEXT_COLOR
     }}>
-        :root {
-            --bg-color: #050505;
-            --card-bg: rgba(24, 24, 27, var(--cardOpacity));
-            --border: rgba(255, 255, 255, 0.1);        
-            --text-main: var(--textColor);     
-            --text-sub: #a1a1aa;      
-            
-            --terminal-green: var(--hoverColor); 
-            --terminal-border: var(--hoverBorder);
-            
-            --accent-gradient: linear-gradient(135deg, var(--titleFrom) 0%, var(--titleTo) 100%);
-            --link-color: #3b82f6; 
-        }
+        :root { --bg-color: #050505; --card-bg: rgba(24, 24, 27, var(--cardOpacity)); --border: rgba(255, 255, 255, 0.1); --text-main: var(--textColor); --text-sub: #a1a1aa; --terminal-green: var(--hoverColor); --terminal-border: var(--hoverBorder); --accent-gradient: linear-gradient(135deg, var(--titleFrom) 0%, var(--titleTo) 100%); --link-color: #3b82f6; }
+    </style>
 
-        :global(.note-link) { color: var(--link-color); text-decoration: none; word-break: break-all; }
-        :global(.note-link:hover) { text-decoration: underline; color: #60a5fa; }
-
-        /* --- 🖥️ 电脑端默认样式 --- */
-        html {
-            height: 100%;
-            overflow: hidden; 
-        }
-
-        body { 
-            font-family: 'Inter', sans-serif; margin: 0; padding: 0;
-            color: var(--text-main); 
-            height: 100vh;
-            overflow: hidden; 
-            
-            background-color: var(--bg-color);
-            background-image: 
-                radial-gradient(circle at 50% -10%, var(--glowColor) 0%, transparent 60%),
-                radial-gradient(circle at 90% 90%, #0f172a 0%, transparent 40%);
-            background-attachment: fixed;
-            display: flex; flex-direction: column;
-        }
-
-        /* --- 顶部导航栏 (PC居中版) --- */
-        .header-bar {
-            position: fixed; 
-            top: 0; 
-            
-            /* 居中核心代码：宽度70%，左移50%再回退50% */
-            width: 70%; 
-            left: 50%;
-            transform: translateX(-50%);
-            
-            height: 80px; 
-            padding: 0 30px; 
-            background: rgba(5,5,5,0.6); 
-            backdrop-filter: blur(20px); 
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            /* 加左右边框 */
-            border-left: 1px solid rgba(255,255,255,0.05);
-            border-right: 1px solid rgba(255,255,255,0.05);
-            
-            display: flex; justify-content: space-between; align-items: center;
-            z-index: 50; 
-            box-sizing: border-box; 
-            gap: 20px;
-        }
-
+    <style is:global>
+        * { box-sizing: border-box; }
+        html { height: 100%; overflow: hidden; }
+        body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; color: var(--text-main); height: 100vh; overflow: hidden; background-color: var(--bg-color); background-image: radial-gradient(circle at 50% -10%, var(--glowColor) 0%, transparent 60%), radial-gradient(circle at 90% 90%, #0f172a 0%, transparent 40%); background-attachment: fixed; display: flex; flex-direction: column; }
+        
+        .note-link { color: var(--link-color); text-decoration: none; word-break: break-all; }
+        .note-link:hover { text-decoration: underline; color: #60a5fa; }
+        .text-content p { margin: 0 0 8px 0; }
+        .text-content p:last-child { margin-bottom: 0; }
+        .text-content a { color: var(--link-color); text-decoration: none; }
+        
+        /* 顶部导航 */
+        .header-bar { position: fixed; top: 0; width: 70%; left: 50%; transform: translateX(-50%); height: 80px; padding: 0 30px; background: rgba(5,5,5,0.6); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; z-index: 50; box-sizing: border-box; gap: 20px; }
         .header-left { display: flex; flex-direction: column; justify-content: center; min-width: 150px; }
+        h1 { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5)); display: flex; align-items: center; }
         
-        h1 { 
-            font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.5px;
-            background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5));
-            display: flex; align-items: center;
-        }
-
-        .header-marquee {
-            flex: 1; overflow: hidden; position: relative; height: 40px; display: flex; align-items: center;
-            mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-            -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-        }
-
-        .marquee-track {
-            display: flex; gap: 40px; 
-            animation: marquee-scroll 25s linear infinite;
-            width: max-content;
-        }
+        /* 走马灯 */
+        .header-marquee { flex: 1; overflow: hidden; position: relative; height: 40px; display: flex; align-items: center; mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+        .marquee-track { display: flex; gap: 40px; animation: marquee-scroll 25s linear infinite; width: max-content; }
         .header-marquee:hover .marquee-track { animation-play-state: paused; }
-
-        .reaction-item {
-            font-size: 1.2rem; cursor: pointer; user-select: none;
-            transition: all 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            opacity: 0.6; filter: grayscale(0.5);
-            transform-origin: center center;
-            white-space: nowrap;
-        }
+        .reaction-item { font-size: 1.2rem; cursor: pointer; user-select: none; transition: all 0.1s; opacity: 0.6; filter: grayscale(0.5); transform-origin: center center; white-space: nowrap; }
         .reaction-item:hover { transform: scale(1.3); opacity: 1; filter: grayscale(0); }
-
-        @keyframes pop-bounce {
-            0% { transform: scale(1); }
-            40% { transform: scale(1.6); text-shadow: 0 0 20px rgba(255,255,255,0.8); filter: brightness(2); }
-            80% { transform: scale(0.9); }
-            100% { transform: scale(1); }
-        }
-        .reaction-item.active-pop {
-            animation: pop-bounce 0.4s ease-out forwards;
-            opacity: 1; filter: grayscale(0) brightness(1.2); color: #fff;
-        }
-        @keyframes marquee-scroll {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-        }
-
-        .header-right { display: flex; align-items: center; gap: 15px; min-width: 200px; justify-content: flex-end; }
+        .reaction-item.active-pop { animation: pop-bounce 0.4s ease-out forwards; opacity: 1; filter: grayscale(0) brightness(1.2); color: #fff; }
         
-        .status-badge {
-            font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
-            color: var(--terminal-green); background: rgba(0, 0, 0, 0.3);
-            padding: 4px 10px; border-radius: 4px; 
-            border: 1px solid var(--terminal-green); 
-            opacity: 0.8;
-            display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px);
-        }
+        .header-right { display: flex; align-items: center; gap: 15px; min-width: 200px; justify-content: flex-end; }
+        .status-badge { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--terminal-green); background: rgba(0, 0, 0, 0.3); padding: 4px 10px; border-radius: 4px; border: 1px solid var(--terminal-green); opacity: 0.8; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px); }
         .status-dot { width: 6px; height: 6px; background: var(--terminal-green); border-radius: 50%; box-shadow: 0 0 8px var(--terminal-green); animation: pulse 2s infinite; }
         
-        .rss-btn {
-            color: var(--text-sub); text-decoration: none; display: flex; align-items: center; gap: 6px;
-            font-size: 0.8rem; font-weight: 600; padding: 6px 12px; border-radius: 6px;
-            border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s;
-            background: rgba(0,0,0,0.2); backdrop-filter: blur(4px);
-        }
-        
-        .rss-btn:hover { 
-            border-color: var(--terminal-border); 
-            color: var(--terminal-green); 
-            background: rgba(255, 255, 255, 0.05); 
-        }
-        .rss-icon { width: 16px; height: 16px; fill: currentColor; }
+        /* 顶部功能按钮 (RSS & GitHub) */
+        .icon-btn { color: var(--text-sub); text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s; background: rgba(0,0,0,0.2); backdrop-filter: blur(4px); }
+        .icon-btn:hover { border-color: var(--terminal-border); color: var(--terminal-green); background: rgba(255, 255, 255, 0.05); box-shadow: 0 0 10px rgba(57, 255, 20, 0.1); }
+        .btn-icon-svg { width: 16px; height: 16px; fill: currentColor; }
 
-        /* --- 内容区域 (PC居中版) --- */
-        .dashboard-container { 
-            flex: 1; 
-            display: grid; grid-template-columns: 1fr 1fr; gap: 0; 
-            overflow: hidden; 
-            padding-top: 0;
-            height: 100vh;
-            
-            /* 居中核心代码 */
-            width: 70%; 
-            margin: 0 auto; 
-            border-left: 1px solid var(--border);
-            border-right: 1px solid var(--border);
+        /* 刷新悬浮按钮 (FAB) */
+        .refresh-btn {
+            position: fixed; bottom: 30px; right: 30px; 
+            width: 50px; height: 50px; 
+            border-radius: 50%; 
+            background: rgba(20, 20, 23, 0.7); 
+            border: 1px solid rgba(255, 255, 255, 0.15); 
+            color: var(--text-sub); 
+            cursor: pointer; 
+            backdrop-filter: blur(10px); 
+            display: flex; align-items: center; justify-content: center; 
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); 
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-        
-        .scroll-column { 
-            height: 100%; 
-            overflow-y: auto; 
-            padding: 100px 20px 40px 20px;
-            scroll-behavior: smooth; 
-            scrollbar-width: thin; 
-            scrollbar-color: rgba(255,255,255,0.1) transparent; 
+        .refresh-btn:hover {
+            border-color: var(--terminal-green);
+            color: var(--terminal-green);
+            box-shadow: 0 0 15px rgba(57, 255, 20, 0.3);
+            transform: rotate(180deg) scale(1.1); /* 旋转动画 */
         }
+        .refresh-icon { width: 24px; height: 24px; fill: currentColor; }
+
+        /* 布局 */
+        .dashboard-container { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0; overflow: hidden; padding-top: 0; height: 100vh; width: 70%; margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+        .dashboard-container.one-col { grid-template-columns: 1fr; }
+        .dashboard-container.one-col .column-left { border-right: none; }
+        .hidden-col { display: none !important; }
         
+        .scroll-column { height: 100%; overflow-y: auto; padding: 100px 20px 40px 20px; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
         .scroll-column::-webkit-scrollbar { width: 4px; }
         .scroll-column::-webkit-scrollbar-track { background: transparent; }
         .scroll-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
         .column-left { border-right: 1px solid rgba(255,255,255,0.05); }
 
+        /* 卡片 */
         .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; transition: all 0.2s ease; animation: fade-in-up 0.5s ease-out forwards; opacity: 0; }
         .card:hover { transform: translateY(-2px); border-color: var(--terminal-border); background: rgba(30, 30, 35, 0.8); }
-
         .user-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-        .avatar { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        .avatar { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); object-fit: cover; }
         .username { font-weight: 700; font-size: 0.95rem; color: var(--userColor); }
         .text-content { line-height: 1.6; color: var(--text-main); font-size: 0.9rem; margin-bottom: 12px; overflow-wrap: break-word; }
         .renote-box { background: rgba(0,0,0,0.3); border-left: 2px solid #555; padding: 10px; margin-bottom: 10px; font-size: 0.85em; color: #999; font-family: 'JetBrains Mono', monospace; }
-        
-        /* --- 🖼️ 图片样式 --- */
         .media-grid { display: grid; gap: 4px; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
         .media-grid[data-count="1"] { grid-template-columns: 1fr; }
         .media-grid[data-count="2"] { grid-template-columns: 1fr 1fr; }
         .media-grid[data-count="3"], .media-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
-        
         .media-item { width: 100%; height: 200px; object-fit: cover; cursor: zoom-in; background: #222; transition: opacity 0.2s; }
         .media-grid[data-count="1"] .media-item { height: auto; max-height: 650px; object-fit: cover; }
-
         .media-item:hover { opacity: 0.8; }
-        
         .card-footer { padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #666; font-family: 'JetBrains Mono', monospace; }
         .footer-right { display: flex; align-items: center; gap: 12px; }
         .renote-icon-svg { width: 16px; height: 16px; fill: var(--text-sub); opacity: 0.7; }
@@ -323,145 +286,239 @@ const marqueeItems = [
         #lightbox.active { opacity: 1; pointer-events: all; }
         #lightbox img { max-width: 95%; max-height: 95%; border-radius: 4px; box-shadow: 0 0 30px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform: scale(0.95); }
         #lightbox.active img.loaded { opacity: 1; transform: scale(1); }
-
         .spinner { position: absolute; width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, 0.1); border-left-color: var(--terminal-green); border-radius: 50%; animation: spin 1s linear infinite; z-index: -1; }
+        
+        @keyframes marquee-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        @keyframes pop-bounce { 0% { transform: scale(1); } 40% { transform: scale(1.6); text-shadow: 0 0 20px rgba(255,255,255,0.8); filter: brightness(2); } 80% { transform: scale(0.9); } 100% { transform: scale(1); } }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         @keyframes fade-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* --- 📱 移动端适配 --- */
+        .client-loading { text-align:center; padding: 20px; color: #666; font-size: 0.9em; animation: pulse 1s infinite; }
+        .error-message { color: #ef4444; padding: 20px; text-align: center; border: 1px solid rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.1); border-radius: 8px; margin: 100px auto; width: 80%; }
+
         @media (max-width: 768px) {
-            /* 1. 强制解锁滚动权限 (核心修复) */
-            html, body {
-                height: auto !important;
-                overflow-y: auto !important;
-                display: block;
-                background-attachment: scroll; /* 修复移动端背景固定导致的卡顿 */
-            }
-            
-            /* 移动端 Header */
-            .header-bar { 
-                width: 100%; left: 0; transform: none; padding: 0 15px; 
-                border-left: none; border-right: none;
-            }
+            html, body { height: auto !important; overflow-y: auto !important; display: block; background-attachment: scroll; }
+            .header-bar { width: 100%; left: 0; transform: none; padding: 0 15px; border-left: none; border-right: none; }
             .header-marquee { display: none; }
-            
-            /* 2. 容器高度自适应，不锁死 */
-            .dashboard-container { 
-                display: block; 
-                padding-top: 0; 
-                height: auto !important;
-                overflow: visible !important;
-                width: 100%; margin: 0; border: none;
-            }
-            
-            /* 3. 内容区通过 padding 避开 Header */
-            .scroll-column { 
-                height: auto !important;
-                overflow: visible !important;
-                padding: 100px 15px 40px 15px !important; 
-            }
-            
+            .dashboard-container { display: block; padding-top: 0; height: auto !important; overflow: visible !important; width: 100%; margin: 0; border: none; }
+            .scroll-column { height: auto !important; overflow: visible !important; padding: 100px 15px 40px 15px !important; }
             .column-left { border-right: none; border-bottom: 1px solid var(--border); }
+            /* 移动端刷新按钮稍微往上一点，防止遮挡底部 */
+            .refresh-btn { bottom: 20px; right: 20px; width: 45px; height: 45px; }
         }
     </style>
 </head>
 <body>
     <header class="header-bar">
-        <div class="header-left">
-            <h1>{CONFIG.SITE_TITLE}</h1>
-        </div>
-        
-        <div class="header-marquee">
-            <div class="marquee-track">
-                {marqueeItems.map(item => (
-                    <div class="reaction-item">{item}</div>
-                ))}
-            </div>
-        </div>
-
+        <div class="header-left"><h1>{CONFIG.SITE_TITLE}</h1></div>
+        <div class="header-marquee"><div class="marquee-track">{marqueeItems.map(item => (<div class="reaction-item">{item}</div>))}</div></div>
         <div class="header-right">
             <div class="status-badge"><span class="status-dot"></span>SYSTEM ONLINE</div>
-            <a href="/rss.xml" class="rss-btn" target="_blank" title="Subscribe RSS">
-                <svg class="rss-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19 7.38 20 6.18 20C5 20 4 19 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1Z"/></svg>
+            
+            {/* GitHub 按钮 */}
+            <a href="https://github.com/Ghfftn/misskey-blog" target="_blank" class="icon-btn" title="Source Code">
+                <svg class="btn-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+            </a>
+
+            {/* RSS 按钮 */}
+            <a href="/rss.xml" class="icon-btn" target="_blank" title="Subscribe">
+                <svg class="btn-icon-svg" viewBox="0 0 24 24"><path d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19 7.38 20 6.18 20C5 20 4 19 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1Z"/></svg>
                 RSS
             </a>
         </div>
     </header>
 
-    <main class="dashboard-container">
-        <div class="scroll-column column-left">
-            {errorMsg && <div style="color:red; margin-bottom:20px;">{errorMsg}</div>}
-            {mediaNotes.map((note, index) => {
-                const target = note.renote || note;
-                const isRenote = !!note.renote;
-                return (
-                    <article class="card" style={`animation-delay: ${index * 0.05}s`}>
-                        <div class="user-header">
-                            <img class="avatar" src={target.user.avatarUrl} loading="lazy"/>
-                            <span class="username">{target.user.name || target.user.username}</span>
-                        </div>
-                        {target.text && <div class="text-content" set:html={formatNoteText(target.text)}></div>}
-                        {target.files && (
-                            <div class="media-grid" data-count={target.files.length}>
-                                {target.files.map(file => (
-                                    file.type.startsWith('image') ?
-                                    <img src={file.thumbnailUrl || file.url} class="media-item" loading="lazy" data-full-src={file.url} /> 
-                                    : <video src={file.url} controls style="width:100%"></video>
-                                ))}
-                            </div>
-                        )}
-                        <div class="card-footer">
-                            <span class="date">{formatDate(note.createdAt)}</span>
-                            <div class="footer-right">
-                                {isRenote && (
-                                    <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
+    <main class={`dashboard-container ${singleColumnMode ? 'one-col' : ''}`} id="main-container">
+        {/* 服务端渲染区 */}
+        {errorMsg === '' ? (
+            <>
+                <div class={`scroll-column column-left ${!hasMedia ? 'hidden-col' : ''}`}>
+                    {mediaNotes.map((note, index) => {
+                        const target = note.renote || note;
+                        return (
+                            <article class="card" style={`animation-delay: ${index * 0.05}s`}>
+                                <div class="user-header">
+                                    <img class="avatar" src={target.user.avatarUrl} loading="lazy" alt={target.user.name}/>
+                                    <span class="username">{target.user.name || target.user.username}</span>
+                                </div>
+                                {target.text && <div class="text-content" set:html={formatNoteText(target.text, target.isHtml)}></div>}
+                                {target.files && (
+                                    <div class="media-grid" data-count={target.files.length}>
+                                        {target.files.map(file => (
+                                            file.type.startsWith('image') ?
+                                            <img src={file.thumbnailUrl || file.url} class="media-item" loading="lazy" data-full-src={file.url} alt="Media" /> : <video src={file.url} controls style="width:100%"></video>
+                                        ))}
+                                    </div>
                                 )}
-                                <a href={`${INSTANCE_URL}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
-                            </div>
-                        </div>
-                    </article>
-                )
-            })}
-        </div>
-        <div class="scroll-column column-right">
-            {textNotes.map((note, index) => {
-                const isRenote = !!note.renote;
-                const target = isRenote ? note.renote : note;
-                return (
-                    <article class="card" style={`animation-delay: ${(index * 0.05) + 0.2}s`}>
-                        <div class="user-header">
-                            <img class="avatar" src={target.user.avatarUrl} loading="lazy"/>
-                            <div class="username">{target.user.name || target.user.username}</div>
-                        </div>
-                        {target.text && <div class="text-content" set:html={formatNoteText(target.text)}></div>}
-                        {isRenote && note.text && (
-                            <div class="renote-box" set:html={`// comment: <br> ${formatNoteText(note.text)}`}></div>
-                        )}
-                        <div class="card-footer">
-                            <span class="date">{formatDate(note.createdAt)}</span>
-                            <div class="footer-right">
-                                {isRenote && (
-                                    <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-                                )}
-                                <a href={`${INSTANCE_URL}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
-                            </div>
-                        </div>
-                    </article>
-                )
-            })}
-        </div>
+                                <div class="card-footer">
+                                    <span class="date">{formatDate(note.createdAt)}</span>
+                                    <div class="footer-right">
+                                        <a href={platform === 'mastodon' ? `${INSTANCE_URL}/@${USER_NAME}/${note.id}` : `${INSTANCE_URL}/notes/${note.id}`} target="_blank" rel="noopener noreferrer" class="original-link">RAW ↗</a>
+                                    </div>
+                                </div>
+                            </article>
+                        )
+                    })}
+                </div>
+                <div class={`scroll-column column-right ${!hasText ? 'hidden-col' : ''}`}>
+                    {textNotes.map((note, index) => {
+                        const target = note.renote || note;
+                        return (
+                            <article class="card" style={`animation-delay: ${(index * 0.05) + 0.2}s`}>
+                                <div class="user-header">
+                                    <img class="avatar" src={target.user.avatarUrl} loading="lazy" alt={target.user.name}/>
+                                    <div class="username">{target.user.name || target.user.username}</div>
+                                </div>
+                                {target.text && <div class="text-content" set:html={formatNoteText(target.text, target.isHtml)}></div>}
+                                {note.renote && note.text && (<div class="renote-box" set:html={`// comment: <br> ${formatNoteText(note.text, note.isHtml)}`}></div>)}
+                                <div class="card-footer">
+                                    <span class="date">{formatDate(note.createdAt)}</span>
+                                    <div class="footer-right">
+                                        <a href={platform === 'mastodon' ? `${INSTANCE_URL}/@${USER_NAME}/${note.id}` : `${INSTANCE_URL}/notes/${note.id}`} target="_blank" rel="noopener noreferrer" class="original-link">RAW ↗</a>
+                                    </div>
+                                </div>
+                            </article>
+                        )
+                    })}
+                </div>
+            </>
+        ) : (
+            /* 客户端救援等待区 */
+            <div id="client-fallback-area">
+                <div class="error-message" style="display:none;" id="final-error">
+                    <strong>⚠️ {errorMsg}</strong>
+                </div>
+                <div class="client-loading" id="client-loading">
+                    Trying Client-Side Fetch (Bypassing Server Block)...<br/>
+                    正在尝试客户端直连...
+                </div>
+            </div>
+        )}
     </main>
     
-    <div id="lightbox">
-        <div class="spinner"></div>
-        <img id="lightbox-img" src="" alt="Full view" />
-    </div>
+    <div id="lightbox"><div class="spinner"></div><img id="lightbox-img" src="" alt="Full view" /></div>
     
-    <script>
+    {/* 右下角刷新按钮 */}
+    <button id="refresh-btn" class="refresh-btn" title="Refresh Page">
+        <svg class="refresh-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+        </svg>
+    </button>
+    
+    <script define:vars={{ USER_NAME, INSTANCE_URL, DOMAIN, serverError: errorMsg }}>
+        // 绑定刷新按钮功能
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            location.reload();
+        });
+
+        (async function clientSideRescue() {
+            if (!serverError) return; 
+
+            const loadingEl = document.getElementById('client-loading');
+            const mainContainer = document.getElementById('main-container');
+
+            const normalizeMastodon = (status) => {
+                const note = {
+                    id: status.id,
+                    createdAt: status.created_at,
+                    text: status.content,
+                    isHtml: true,
+                    user: { avatarUrl: status.account.avatar, name: status.account.display_name, username: status.account.username, id: status.account.id },
+                    files: (status.media_attachments || []).map(m => ({ type: m.type, url: m.url, thumbnailUrl: m.preview_url || m.url })),
+                    replyId: status.in_reply_to_id,
+                    replyAccountId: status.in_reply_to_account_id,
+                    renote: null
+                };
+                if (status.reblog) note.renote = normalizeMastodon(status.reblog);
+                return note;
+            };
+
+            async function fetchMstdClient() {
+                try {
+                    let lookupUrl = `${INSTANCE_URL}/api/v1/accounts/lookup?acct=${USER_NAME}@${DOMAIN}`;
+                    let res = await fetch(lookupUrl);
+                    if (!res.ok) res = await fetch(`${INSTANCE_URL}/api/v1/accounts/lookup?acct=${USER_NAME}`);
+                    if (!res.ok) throw new Error('Client lookup failed');
+                    
+                    const user = await res.json();
+                    const notesRes = await fetch(`${INSTANCE_URL}/api/v1/accounts/${user.id}/statuses?limit=40&exclude_replies=true`);
+                    const rawNotes = await notesRes.json();
+                    return rawNotes.map(normalizeMastodon);
+                } catch(e) {
+                    console.error(e);
+                    return [];
+                }
+            }
+
+            const notes = await fetchMstdClient();
+            
+            if (notes.length > 0) {
+                loadingEl.style.display = 'none';
+                
+                const validNotes = notes.filter(n => {
+                   const target = n.renote || n;
+                   if (!target.user) return false;
+                   if (target.replyId && target.replyAccountId !== target.user.id) return false;
+                   return true;
+                });
+
+                const mediaNotes = validNotes.filter(n => (n.renote||n).files && (n.renote||n).files.length > 0);
+                const textNotes = validNotes.filter(n => !((n.renote||n).files && (n.renote||n).files.length > 0));
+                
+                const renderCard = (note) => {
+                    const target = note.renote || note;
+                    const mediaHtml = target.files && target.files.length ? 
+                        `<div class="media-grid" data-count="${target.files.length}">
+                            ${target.files.map(f => `<img src="${f.thumbnailUrl}" class="media-item" data-full-src="${f.url}" loading="lazy" alt="Media">`).join('')}
+                        </div>` : '';
+                    
+                    const dateStr = new Date(note.createdAt).toLocaleDateString('zh-CN', {month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+
+                    return `
+                    <article class="card" style="opacity:1; transform:translateY(0);">
+                        <div class="user-header">
+                            <img class="avatar" src="${target.user.avatarUrl}" alt="${target.user.name}">
+                            <span class="username">${target.user.name}</span>
+                        </div>
+                        <div class="text-content">${target.text}</div>
+                        ${mediaHtml}
+                        <div class="card-footer"><span class="date">${dateStr}</span>
+                        <div class="footer-right"><a href="${INSTANCE_URL}/${note.id}" target="_blank" rel="noopener noreferrer" class="original-link">RAW ↗</a></div></div>
+                    </article>`;
+                };
+
+                let html = `
+                    <div class="scroll-column column-left ${mediaNotes.length===0?'hidden-col':''}">${mediaNotes.map(renderCard).join('')}</div>
+                    <div class="scroll-column column-right ${textNotes.length===0?'hidden-col':''}">${textNotes.map(renderCard).join('')}</div>
+                `;
+                
+                mainContainer.innerHTML = html;
+                mainContainer.classList.remove('one-col');
+                if(mediaNotes.length===0 || textNotes.length===0) mainContainer.classList.add('one-col');
+
+                document.querySelectorAll('.media-item').forEach(img => {
+                    img.addEventListener('click', (e) => {
+                        const lb = document.getElementById('lightbox');
+                        const lbImg = document.getElementById('lightbox-img');
+                        lbImg.classList.remove('loaded');
+                        lbImg.src = e.target.getAttribute('data-full-src');
+                        lb.classList.add('active');
+                    });
+                });
+
+            } else {
+                loadingEl.innerText = "客户端尝试也失败了，请检查账号隐私设置。";
+                document.getElementById('final-error').style.display = 'block';
+            }
+        })();
+
         const lightbox = document.getElementById('lightbox');
         const lightboxImg = document.getElementById('lightbox-img');
-
+        if(lightboxImg) lightboxImg.onload = () => lightboxImg.classList.add('loaded');
+        if(lightbox) lightbox.addEventListener('click', () => { lightbox.classList.remove('active'); setTimeout(() => lightboxImg.classList.remove('loaded'), 300); });
+        
         document.querySelectorAll('.media-item').forEach(img => {
             img.addEventListener('click', (e) => {
                 lightboxImg.classList.remove('loaded');
@@ -469,32 +526,13 @@ const marqueeItems = [
                 lightbox.classList.add('active');
             });
         });
-
-        lightboxImg.onload = () => {
-            lightboxImg.classList.add('loaded');
-        };
-
-        lightbox.addEventListener('click', () => {
-            lightbox.classList.remove('active');
-            setTimeout(() => lightboxImg.classList.remove('loaded'), 300);
-        });
-
         const reactions = document.querySelectorAll('.reaction-item');
-        function triggerPop(element) {
-            element.classList.remove('active-pop');
-            void element.offsetWidth; 
-            element.classList.add('active-pop');
-        }
-        reactions.forEach(item => {
-            item.addEventListener('click', () => triggerPop(item));
-        });
-        
-        // 修改这里：时间改成 800 (毫秒)
+        function triggerPop(element) { element.classList.remove('active-pop'); void element.offsetWidth; element.classList.add('active-pop'); }
+        reactions.forEach(item => item.addEventListener('click', () => triggerPop(item)));
         setInterval(() => {
-            const randomIndex = Math.floor(Math.random() * reactions.length);
-            const randomItem = reactions[randomIndex];
-            if (!randomItem.matches(':hover')) {
-                triggerPop(randomItem);
+            if(reactions.length > 0) {
+                const randomItem = reactions[Math.floor(Math.random() * reactions.length)];
+                if (!randomItem.matches(':hover')) triggerPop(randomItem);
             }
         }, 800);
     </script>
