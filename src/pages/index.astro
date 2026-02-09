@@ -1,49 +1,31 @@
 ---
 // src/pages/index.astro
+import { CONFIG } from '../config';
 
-const INSTANCE = 'https://sshup.com'; 
-const USER_ID = 'aid0j1fyuf3i0003'; 
-
-// 1. 这里修改分享卡片上显示的标题
-const SITE_TITLE = '否极泰来 | 联邦动态博客';
-const SITE_DESC = 'Connecting to fediverse... | Misskey 动态同步';
-const SITE_ICON = 'https://sshup.com/files/thumbnail-b457fa5b-1189-427d-baa7-389673f93283';
-const SITE_URL = 'https://blog.sshup.com';
+// 文本处理函数：链接高亮 + 换行处理
+const formatNoteText = (text) => {
+    if (!text) return '';
+    let formatted = text
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    formatted = formatted.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank" class="note-link">${url}</a>`;
+    });
+    formatted = formatted.replace(/\n/g, '<br>');
+    return formatted;
+};
 
 let mediaNotes = []; 
 let textNotes = [];
 let errorMsg = '';
 
-// --- 文本处理函数：链接高亮 + 换行处理 ---
-const formatNoteText = (text) => {
-    if (!text) return '';
-    
-    // 1. 防止 XSS 攻击（基础转义）
-    let formatted = text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-
-    // 2. 将 URL 转换为链接
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    formatted = formatted.replace(urlRegex, (url) => {
-        return `<a href="${url}" target="_blank" class="note-link">${url}</a>`;
-    });
-
-    // 3. 处理换行符
-    formatted = formatted.replace(/\n/g, '<br>');
-
-    return formatted;
-};
-
 try {
-  const response = await fetch(`${INSTANCE}/api/users/notes`, {
+  const response = await fetch(`${CONFIG.INSTANCE}/api/users/notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      userId: USER_ID,
+      userId: CONFIG.USER_ID,
       limit: 60,
       includeReplies: false, 
       includeMyRenotes: true 
@@ -55,12 +37,11 @@ try {
 
   allNotes.forEach(note => {
     const target = note.renote || note;
-    if (target.replyId) return; // 过滤回复
+    if (target.replyId) return; 
     const hasMedia = target.files && target.files.length > 0;
     if (hasMedia) mediaNotes.push(note);
     else textNotes.push(note);
   });
-
 } catch (e) {
   errorMsg = 'System Offline';
 }
@@ -70,27 +51,29 @@ const formatDate = (isoString) => {
         month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'
     });
 };
+
+// 组合完整标题用于 SEO
+const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
 ---
 
 <html lang="zh-cn">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>{SITE_TITLE}</title>
-    <link rel="icon" href={SITE_ICON} />
+    <title>{PAGE_TITLE}</title>
+    <link rel="icon" href={CONFIG.SITE_ICON} />
     <link rel="alternate" type="application/rss+xml" title="RSS Feed" href="/rss.xml" />
     
-    <meta name="description" content={SITE_DESC} />
+    <meta name="description" content={CONFIG.SITE_DESC} />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content={SITE_TITLE} />
-    <meta property="og:description" content={SITE_DESC} />
-    <meta property="og:url" content={SITE_URL} />
-    <meta property="og:image" content={SITE_ICON} />
+    <meta property="og:title" content={PAGE_TITLE} />
+    <meta property="og:description" content={CONFIG.SITE_DESC} />
+    <meta property="og:image" content={CONFIG.SITE_ICON} />
     
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content={SITE_TITLE} />
-    <meta name="twitter:description" content={SITE_DESC} />
-    <meta name="twitter:image" content={SITE_ICON} />
+    <meta name="twitter:title" content={PAGE_TITLE} />
+    <meta name="twitter:description" content={CONFIG.SITE_DESC} />
+    <meta name="twitter:image" content={CONFIG.SITE_ICON} />
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
@@ -128,11 +111,19 @@ const formatDate = (isoString) => {
 
         .header-left { display: flex; flex-direction: column; justify-content: center; }
         
-        /* 2. 这里删掉了 UNIVERSE */
         h1 { 
             font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.5px;
             background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5));
+            display: flex; align-items: center; gap: 10px; /* 让标题和副标题在一行或者组合 */
+        }
+        
+        /* 副标题样式 */
+        .header-subtitle {
+            font-size: 0.8rem; font-weight: 400; color: var(--text-sub); 
+            font-family: 'JetBrains Mono', monospace; opacity: 0.7;
+            border-left: 1px solid rgba(255,255,255,0.2); padding-left: 10px;
+            letter-spacing: 1px;
         }
         
         .header-right { display: flex; align-items: center; gap: 15px; }
@@ -195,10 +186,8 @@ const formatDate = (isoString) => {
             display: flex; justify-content: space-between; align-items: center; 
             font-size: 0.75em; color: #666; font-family: 'JetBrains Mono', monospace; 
         }
-        
         .footer-right { display: flex; align-items: center; gap: 12px; }
         .renote-icon-svg { width: 16px; height: 16px; fill: var(--text-sub); opacity: 0.7; }
-
         .original-link { color: #fff; text-decoration: none; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
         .original-link:hover { background: var(--terminal-green); color: #000; }
 
@@ -219,10 +208,12 @@ const formatDate = (isoString) => {
     </style>
 </head>
 <body>
-
     <header class="header-bar">
         <div class="header-left">
-            <h1>否极泰来</h1>
+            <h1>
+                {CONFIG.SITE_TITLE}
+                <span class="header-subtitle">{CONFIG.SITE_SUBTITLE}</span>
+            </h1>
         </div>
         <div class="header-right">
             <div class="status-badge"><span class="status-dot"></span>SYSTEM ONLINE</div>
@@ -245,9 +236,7 @@ const formatDate = (isoString) => {
                             <img class="avatar" src={target.user.avatarUrl} loading="lazy"/>
                             <span class="username">{target.user.name || target.user.username}</span>
                         </div>
-                        {target.text && (
-                            <div class="text-content" set:html={formatNoteText(target.text)}></div>
-                        )}
+                        {target.text && <div class="text-content" set:html={formatNoteText(target.text)}></div>}
                         {target.files && (
                             <div class="media-grid" data-count={target.files.length}>
                                 {target.files.map(file => (
@@ -261,18 +250,15 @@ const formatDate = (isoString) => {
                             <span class="date">{formatDate(note.createdAt)}</span>
                             <div class="footer-right">
                                 {isRenote && (
-                                    <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
-                                    </svg>
+                                    <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
                                 )}
-                                <a href={`${INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                                <a href={`${CONFIG.INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
                             </div>
                         </div>
                     </article>
                 )
             })}
         </div>
-
         <div class="scroll-column column-right">
             {textNotes.map((note, index) => {
                 const isRenote = !!note.renote;
@@ -283,24 +269,17 @@ const formatDate = (isoString) => {
                             <img class="avatar" src={target.user.avatarUrl} loading="lazy"/>
                             <div class="username">{target.user.name || target.user.username}</div>
                         </div>
-                        
-                        {target.text && (
-                            <div class="text-content" set:html={formatNoteText(target.text)}></div>
-                        )}
-                        
+                        {target.text && <div class="text-content" set:html={formatNoteText(target.text)}></div>}
                         {isRenote && note.text && (
                             <div class="renote-box" set:html={`// comment: <br> ${formatNoteText(note.text)}`}></div>
                         )}
-                        
                         <div class="card-footer">
                             <span class="date">{formatDate(note.createdAt)}</span>
                             <div class="footer-right">
                                 {isRenote && (
-                                    <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
-                                    </svg>
+                                    <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
                                 )}
-                                <a href={`${INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                                <a href={`${CONFIG.INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
                             </div>
                         </div>
                     </article>
@@ -308,9 +287,7 @@ const formatDate = (isoString) => {
             })}
         </div>
     </main>
-
     <div id="lightbox"><img id="lightbox-img" src="" alt="Full view" /></div>
-
     <script>
         const lightbox = document.getElementById('lightbox');
         const lightboxImg = document.getElementById('lightbox-img');

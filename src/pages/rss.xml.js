@@ -1,19 +1,13 @@
 // src/pages/rss.xml.js
 import rss from '@astrojs/rss';
-
-const INSTANCE = 'https://sshup.com';
-const USER_ID = 'aid0j1fyuf3i0003';
-// 3. 这里也同步更新为“联邦动态博客”
-const SITE_TITLE = '否极泰来 | 联邦动态博客';
-const SITE_DESC = 'Connecting to fediverse...';
-const SITE_ICON = 'https://sshup.com/files/thumbnail-b457fa5b-1189-427d-baa7-389673f93283';
+import { CONFIG } from '../config';
 
 export async function GET(context) {
-  const response = await fetch(`${INSTANCE}/api/users/notes`, {
+  const response = await fetch(`${CONFIG.INSTANCE}/api/users/notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      userId: USER_ID,
+      userId: CONFIG.USER_ID,
       limit: 20,
       includeReplies: false,
       includeMyRenotes: true
@@ -21,14 +15,16 @@ export async function GET(context) {
   });
   const notes = await response.json();
 
+  const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
+
   return rss({
-    title: SITE_TITLE,
-    description: SITE_DESC,
+    title: PAGE_TITLE,
+    description: CONFIG.SITE_DESC,
     site: context.site || 'https://blog.sshup.com',
     customData: `
       <image>
-        <url>${SITE_ICON}</url>
-        <title>${SITE_TITLE}</title>
+        <url>${CONFIG.SITE_ICON}</url>
+        <title>${PAGE_TITLE}</title>
         <link>${context.site || 'https://blog.sshup.com'}</link>
       </image>
     `,
@@ -46,7 +42,7 @@ export async function GET(context) {
         title: title,
         pubDate: new Date(note.createdAt),
         description: target.text || '点击查看图片内容',
-        link: `${INSTANCE}/notes/${note.id}`,
+        link: `${CONFIG.INSTANCE}/notes/${note.id}`,
       };
     }).filter(item => item !== null),
   });
