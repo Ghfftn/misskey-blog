@@ -149,31 +149,29 @@ const marqueeItems = [
 
         body { 
             font-family: 'Inter', sans-serif; margin: 0; padding: 0;
-            color: var(--text-main); height: 100vh;
+            color: var(--text-main); 
+            height: 100vh; /* 桌面端：锁定高度 */
             background-color: var(--bg-color);
             background-image: 
                 radial-gradient(circle at 50% -10%, var(--glowColor) 0%, transparent 60%),
                 radial-gradient(circle at 90% 90%, #0f172a 0%, transparent 40%);
             background-attachment: fixed;
-            overflow: hidden; display: flex; flex-direction: column;
+            overflow: hidden; /* 桌面端：隐藏外部滚动 */
+            display: flex; flex-direction: column;
         }
 
-        /* --- ✨ 统一的悬浮毛玻璃 Header --- */
+        /* --- 全局统一 Header --- */
         .header-bar {
-            /* 固定定位：让它浮在所有内容上方 */
             position: fixed; 
             top: 0; left: 0; width: 100%;
             height: 80px; 
             padding: 0 30px; 
-            
-            /* 毛玻璃核心 */
-            background: rgba(5,5,5,0.6); /* 通透的半透明黑 */
-            backdrop-filter: blur(20px);  /* 强力模糊背景 */
+            background: rgba(5,5,5,0.6); /* 毛玻璃背景 */
+            backdrop-filter: blur(20px); 
             border-bottom: 1px solid rgba(255,255,255,0.05);
-            
             display: flex; justify-content: space-between; align-items: center;
-            z-index: 50; /* 确保在最上层 */
-            box-sizing: border-box; /* 防止padding撑破宽度 */
+            z-index: 50; 
+            box-sizing: border-box; 
             gap: 20px;
         }
 
@@ -253,15 +251,15 @@ const marqueeItems = [
             flex: 1; 
             display: grid; grid-template-columns: 1fr 1fr; gap: 0; 
             overflow: hidden; 
-            padding-top: 0; /* 删除了这里的 padding，改用 scroll-column 的 padding */
-            height: 100vh; /* 撑满屏幕 */
+            padding-top: 0;
+            height: 100vh;
         }
         
+        /* 桌面端：内容在 scroll-column 内部滚动 */
         .scroll-column { 
             height: 100%; 
             overflow-y: auto; 
-            /* 关键修改：增加顶部 padding，让内容从 Header 下方开始，但滚动时能穿过 Header */
-            padding: 100px 20px 40px 20px; 
+            padding: 100px 20px 40px 20px; /* 顶部预留空间给浮动 Header */
             scroll-behavior: smooth; 
             scrollbar-width: thin; 
             scrollbar-color: rgba(255,255,255,0.1) transparent; 
@@ -300,15 +298,24 @@ const marqueeItems = [
         @media (max-width: 768px) {
             body { height: auto; overflow: auto; display: block; }
             
-            /* 手机端现在只需要微调 padding，Header 样式已经全局统一 */
-            .header-bar { 
-                padding: 0 15px; 
+            .header-bar { padding: 0 15px; }
+            .header-marquee { display: none; }
+            
+            /* 手机端：容器高度自动，允许溢出 */
+            .dashboard-container { 
+                display: block; 
+                padding-top: 0; 
+                height: auto;
+                overflow: visible;
             }
             
-            .header-marquee { display: none; }
-            .dashboard-container { display: block; padding-top: 0; }
-            /* 手机端也需要同样的顶部内边距来避开 Header */
-            .scroll-column { height: auto; overflow: visible; padding: 100px 15px 40px 15px; }
+            /* 手机端：内容区也解除锁定 */
+            .scroll-column { 
+                height: auto; 
+                overflow: visible; 
+                padding: 100px 15px 40px 15px; 
+            }
+            
             .column-left { border-right: none; border-bottom: 1px solid var(--border); }
         }
     </style>
