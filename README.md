@@ -139,8 +139,3 @@ npm install
 
 # 3. 启动本地服务器
 npm run dev
-
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Ghfftn/misskey-blog&type=date&legend=top-left)](https://www.star-history.com/#Ghfftn/misskey-blog&type=date&legend=top-left)
