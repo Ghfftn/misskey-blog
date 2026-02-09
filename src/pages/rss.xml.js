@@ -3,11 +3,35 @@ import rss from '@astrojs/rss';
 import { CONFIG } from '../config';
 
 export async function GET(context) {
-  const response = await fetch(`${CONFIG.INSTANCE}/api/users/notes`, {
+  // 1. 解析 Handle
+  const parseHandle = (handle) => {
+      const clean = handle.startsWith('@') ? handle.slice(1) : handle;
+      const parts = clean.split('@');
+      return { username: parts[0], instance: `https://${parts[1]}` };
+  };
+  const { username, instance } = parseHandle(CONFIG.FEDIVERSE_HANDLE);
+
+  // 2. 获取 ID
+  let userId = '';
+  try {
+    const userRes = await fetch(`${instance}/api/users/show`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username }),
+    });
+    const userData = await userRes.json();
+    userId = userData.id;
+  } catch(e) {
+    console.error("RSS Error: Failed to fetch user ID");
+    return new Response('User ID lookup failed', { status: 500 });
+  }
+
+  // 3. 获取笔记
+  const response = await fetch(`${instance}/api/users/notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      userId: CONFIG.USER_ID,
+      userId: userId,
       limit: 20,
       includeReplies: false,
       includeMyRenotes: true
@@ -42,7 +66,7 @@ export async function GET(context) {
         title: title,
         pubDate: new Date(note.createdAt),
         description: target.text || '点击查看图片内容',
-        link: `${CONFIG.INSTANCE}/notes/${note.id}`,
+        link: `${instance}/notes/${note.id}`,
       };
     }).filter(item => item !== null),
   });

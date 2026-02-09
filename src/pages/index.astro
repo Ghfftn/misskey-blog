@@ -16,17 +16,46 @@ const formatNoteText = (text) => {
     return formatted;
 };
 
+// --- 1. 解析联邦账号 ---
+const parseHandle = (handle) => {
+    const clean = handle.startsWith('@') ? handle.slice(1) : handle;
+    const parts = clean.split('@');
+    if (parts.length < 2) return { username: 'error', instance: 'https://sshup.com' };
+    return { username: parts[0], instance: `https://${parts[1]}` };
+};
+const { username: USER_NAME, instance: INSTANCE_URL } = parseHandle(CONFIG.FEDIVERSE_HANDLE);
+
 let mediaNotes = []; 
 let textNotes = [];
 let errorMsg = '';
 let dynamicDesc = CONFIG.SITE_DESC; 
 
+// --- 2. 自动获取 User ID ---
+async function fetchUserId() {
+    try {
+        const userRes = await fetch(`${INSTANCE_URL}/api/users/show`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: USER_NAME }),
+        });
+        if (!userRes.ok) throw new Error('User not found');
+        const userData = await userRes.json();
+        return userData.id;
+    } catch (e) {
+        console.error("Failed to fetch User ID:", e);
+        return null;
+    }
+}
+
 try {
-  const response = await fetch(`${CONFIG.INSTANCE}/api/users/notes`, {
+  const userId = await fetchUserId();
+  if (!userId) throw new Error(`找不到用户: ${CONFIG.FEDIVERSE_HANDLE}`);
+
+  const response = await fetch(`${INSTANCE_URL}/api/users/notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      userId: CONFIG.USER_ID,
+      userId: userId,
       limit: 60,
       includeReplies: false, 
       includeMyRenotes: true 
@@ -54,7 +83,7 @@ try {
     else textNotes.push(note);
   });
 } catch (e) {
-  errorMsg = 'System Offline';
+  errorMsg = `System Offline: ${e.message}`;
 }
 
 const formatDate = (isoString) => {
@@ -65,10 +94,11 @@ const formatDate = (isoString) => {
 
 const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
 
-// 联邦互动符号列表 (布丁是 Misskey 的灵魂)
-const REACTIONS = [
-    '🍮', '❤️', '💬', '🔄', '😺', '🎉', '🤔', '🚀', '⭐', '👀', '➕',
-    '🍮', '❤️', '💬', '🔄', '😺', '🎉', '🤔', '🚀', '⭐', '👀', '➕' // 重复一遍以保证无缝滚动
+// --- 3. 生成无限滚动的走马灯列表 ---
+// 把用户配置的列表重复拼接一次，确保滚动时无缝衔接
+const marqueeItems = [
+    ...CONFIG.THEME.MARQUEE_TEXT,
+    ...CONFIG.THEME.MARQUEE_TEXT
 ];
 ---
 
@@ -92,15 +122,24 @@ const REACTIONS = [
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
-    <style>
+    <style define:vars={{ 
+        titleFrom: CONFIG.THEME.TITLE_GRADIENT_FROM,
+        titleTo: CONFIG.THEME.TITLE_GRADIENT_TO,
+        hoverColor: CONFIG.THEME.BUTTON_HOVER_COLOR,
+        glowColor: CONFIG.THEME.BACKGROUND_GLOW_COLOR,
+        cardOpacity: CONFIG.THEME.CARD_OPACITY,
+        userColor: CONFIG.THEME.USERNAME_COLOR,
+        textColor: CONFIG.THEME.POST_TEXT_COLOR
+    }}>
         :root {
             --bg-color: #050505;
-            --card-bg: rgba(24, 24, 27, 0.6);
+            --card-bg: rgba(24, 24, 27, var(--cardOpacity));
             --border: rgba(255, 255, 255, 0.1);        
-            --text-main: #e4e4e7;     
+            --text-main: var(--textColor);     
             --text-sub: #a1a1aa;      
-            --terminal-green: #39ff14; 
-            --accent-gradient: linear-gradient(135deg, #4ade80 0%, #3b82f6 50%, #8b5cf6 100%);
+            
+            --terminal-green: var(--hoverColor); 
+            --accent-gradient: linear-gradient(135deg, var(--titleFrom) 0%, var(--titleTo) 100%);
             --link-color: #3b82f6; 
         }
 
@@ -112,7 +151,7 @@ const REACTIONS = [
             color: var(--text-main); height: 100vh;
             background-color: var(--bg-color);
             background-image: 
-                radial-gradient(circle at 50% -10%, #1a2e25 0%, transparent 60%),
+                radial-gradient(circle at 50% -10%, var(--glowColor) 0%, transparent 60%),
                 radial-gradient(circle at 90% 90%, #0f172a 0%, transparent 40%);
             background-attachment: fixed;
             overflow: hidden; display: flex; flex-direction: column;
@@ -123,7 +162,7 @@ const REACTIONS = [
             display: flex; justify-content: space-between; align-items: center;
             border-bottom: none; background: transparent; z-index: 10; flex-shrink: 0;
             background: linear-gradient(to bottom, rgba(5,5,5,0.8) 0%, rgba(5,5,5,0) 100%);
-            gap: 20px; /* 给中间留出间隔 */
+            gap: 20px;
         }
 
         .header-left { display: flex; flex-direction: column; justify-content: center; min-width: 150px; }
@@ -141,70 +180,63 @@ const REACTIONS = [
             letter-spacing: 1px;
         }
 
-        /* --- ✨ 走马灯区域 (中间部分) --- */
         .header-marquee {
-            flex: 1; /* 占满中间所有空间 */
-            overflow: hidden;
-            position: relative;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            /* 两端渐隐遮罩：让符号看起来是从虚空中浮现和消失 */
+            flex: 1; overflow: hidden; position: relative; height: 40px; display: flex; align-items: center;
             mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
             -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
         }
 
         .marquee-track {
-            display: flex;
-            gap: 40px; /* 符号之间的间距 */
+            display: flex; gap: 40px; 
             animation: marquee-scroll 25s linear infinite;
             width: max-content;
         }
-        
-        /* 鼠标放上去时暂停，方便“捕捉” */
-        .header-marquee:hover .marquee-track {
-            animation-play-state: paused;
-        }
+        .header-marquee:hover .marquee-track { animation-play-state: paused; }
 
         .reaction-item {
-            font-size: 1.2rem;
-            cursor: pointer;
-            user-select: none;
-            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Q弹贝塞尔曲线 */
-            opacity: 0.6;
-            filter: grayscale(0.5); /* 默认稍微灰一点，低调一点 */
+            font-size: 1.2rem; cursor: pointer; user-select: none;
+            transition: all 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0.6; filter: grayscale(0.5);
+            transform-origin: center center;
+            /* 允许文本不换行，防止短语被打断 */
+            white-space: nowrap;
         }
+        .reaction-item:hover { transform: scale(1.3); opacity: 1; filter: grayscale(0); }
 
-        /* 互动效果：悬停变亮、变大、Q弹 */
-        .reaction-item:hover {
-            transform: scale(1.5) rotate(10deg);
-            opacity: 1;
-            filter: grayscale(0);
-            text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        @keyframes pop-bounce {
+            0% { transform: scale(1); }
+            40% { transform: scale(1.6); text-shadow: 0 0 20px rgba(255,255,255,0.8); filter: brightness(2); }
+            80% { transform: scale(0.9); }
+            100% { transform: scale(1); }
         }
-
+        .reaction-item.active-pop {
+            animation: pop-bounce 0.4s ease-out forwards;
+            opacity: 1; filter: grayscale(0) brightness(1.2); color: #fff;
+        }
         @keyframes marquee-scroll {
             0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); } /* 移动一半的距离，配合重复的内容实现无缝 */
+            100% { transform: translateX(-50%); }
         }
 
         .header-right { display: flex; align-items: center; gap: 15px; min-width: 200px; justify-content: flex-end; }
-
+        
         .status-badge {
             font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
             color: var(--terminal-green); background: rgba(0, 0, 0, 0.3);
-            padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(57, 255, 20, 0.2);
+            padding: 4px 10px; border-radius: 4px; 
+            border: 1px solid var(--terminal-green); 
+            opacity: 0.8;
             display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px);
         }
         .status-dot { width: 6px; height: 6px; background: var(--terminal-green); border-radius: 50%; box-shadow: 0 0 8px var(--terminal-green); animation: pulse 2s infinite; }
-
+        
         .rss-btn {
             color: var(--text-sub); text-decoration: none; display: flex; align-items: center; gap: 6px;
             font-size: 0.8rem; font-weight: 600; padding: 6px 12px; border-radius: 6px;
             border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s;
             background: rgba(0,0,0,0.2); backdrop-filter: blur(4px);
         }
-        .rss-btn:hover { border-color: var(--terminal-green); color: var(--terminal-green); background: rgba(57, 255, 20, 0.05); }
+        .rss-btn:hover { border-color: var(--terminal-green); color: var(--terminal-green); background: rgba(255, 255, 255, 0.05); }
         .rss-icon { width: 16px; height: 16px; fill: currentColor; }
 
         .dashboard-container { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0; overflow: hidden; padding-top: 10px; }
@@ -215,38 +247,33 @@ const REACTIONS = [
         .column-left { border-right: 1px solid rgba(255,255,255,0.05); }
 
         .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; transition: all 0.2s ease; animation: fade-in-up 0.5s ease-out forwards; opacity: 0; }
-        .card:hover { transform: translateY(-2px); border-color: rgba(74, 222, 128, 0.4); background: rgba(30, 30, 35, 0.8); }
+        .card:hover { transform: translateY(-2px); border-color: var(--terminal-green); background: rgba(30, 30, 35, 0.8); }
 
         .user-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
         .avatar { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
-        .username { font-weight: 700; font-size: 0.95rem; }
-        .text-content { line-height: 1.6; color: #d4d4d8; font-size: 0.9rem; margin-bottom: 12px; overflow-wrap: break-word; }
+        .username { font-weight: 700; font-size: 0.95rem; color: var(--userColor); }
+        .text-content { line-height: 1.6; color: var(--text-main); font-size: 0.9rem; margin-bottom: 12px; overflow-wrap: break-word; }
         .renote-box { background: rgba(0,0,0,0.3); border-left: 2px solid #555; padding: 10px; margin-bottom: 10px; font-size: 0.85em; color: #999; font-family: 'JetBrains Mono', monospace; }
-        
         .media-grid { display: grid; gap: 4px; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
         .media-grid[data-count="1"] { grid-template-columns: 1fr; }
         .media-grid[data-count="2"] { grid-template-columns: 1fr 1fr; }
         .media-grid[data-count="3"], .media-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
         .media-item { width: 100%; height: 180px; object-fit: cover; cursor: zoom-in; background: #222; transition: opacity 0.2s; }
         .media-item:hover { opacity: 0.8; }
-
         .card-footer { padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #666; font-family: 'JetBrains Mono', monospace; }
         .footer-right { display: flex; align-items: center; gap: 12px; }
         .renote-icon-svg { width: 16px; height: 16px; fill: var(--text-sub); opacity: 0.7; }
         .original-link { color: #fff; text-decoration: none; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
         .original-link:hover { background: var(--terminal-green); color: #000; }
-
         #lightbox { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.2s; backdrop-filter: blur(10px); }
         #lightbox.active { opacity: 1; pointer-events: all; }
         #lightbox img { max-width: 95%; max-height: 95%; border-radius: 4px; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
-
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         @keyframes fade-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         @media (max-width: 768px) {
             body { height: auto; overflow: auto; display: block; }
             .header-bar { position: sticky; top: 0; padding: 0 15px; background: rgba(5,5,5,0.95); }
-            /* 手机上隐藏走马灯，因为空间太小会很挤 */
             .header-marquee { display: none; }
             .dashboard-container { display: block; padding-top: 10px;}
             .scroll-column { height: auto; overflow: visible; padding: 10px 15px; }
@@ -265,8 +292,9 @@ const REACTIONS = [
         
         <div class="header-marquee">
             <div class="marquee-track">
-                {REACTIONS.map(emoji => (
-                    <div class="reaction-item">{emoji}</div>
+                {/* 遍历用户自定义的列表 */}
+                {marqueeItems.map(item => (
+                    <div class="reaction-item">{item}</div>
                 ))}
             </div>
         </div>
@@ -308,7 +336,7 @@ const REACTIONS = [
                                 {isRenote && (
                                     <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
                                 )}
-                                <a href={`${CONFIG.INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                                <a href={`${INSTANCE_URL}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
                             </div>
                         </div>
                     </article>
@@ -335,7 +363,7 @@ const REACTIONS = [
                                 {isRenote && (
                                     <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
                                 )}
-                                <a href={`${CONFIG.INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                                <a href={`${INSTANCE_URL}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
                             </div>
                         </div>
                     </article>
@@ -344,6 +372,7 @@ const REACTIONS = [
         </div>
     </main>
     <div id="lightbox"><img id="lightbox-img" src="" alt="Full view" /></div>
+    
     <script>
         const lightbox = document.getElementById('lightbox');
         const lightboxImg = document.getElementById('lightbox-img');
@@ -354,6 +383,23 @@ const REACTIONS = [
             });
         });
         lightbox.addEventListener('click', () => lightbox.classList.remove('active'));
+
+        const reactions = document.querySelectorAll('.reaction-item');
+        function triggerPop(element) {
+            element.classList.remove('active-pop');
+            void element.offsetWidth; 
+            element.classList.add('active-pop');
+        }
+        reactions.forEach(item => {
+            item.addEventListener('click', () => triggerPop(item));
+        });
+        setInterval(() => {
+            const randomIndex = Math.floor(Math.random() * reactions.length);
+            const randomItem = reactions[randomIndex];
+            if (!randomItem.matches(':hover')) {
+                triggerPop(randomItem);
+            }
+        }, 800);
     </script>
 </body>
 </html>
