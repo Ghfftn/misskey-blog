@@ -6,7 +6,7 @@ const INSTANCE = 'https://sshup.com';
 const USER_ID = 'aid0j1fyuf3i0003'; 
 const SITE_TITLE = '否极泰来 | Digital Garden';
 const SITE_DESC = 'Connecting to fediverse... | Misskey 动态同步';
-// 使用你提供的图片作为图标和社交卡片封面
+// 你的头像/图标地址
 const SITE_ICON = 'https://sshup.com/files/thumbnail-b457fa5b-1189-427d-baa7-389673f93283';
 // -----------------
 
@@ -20,7 +20,7 @@ try {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       userId: USER_ID,
-      limit: 40, // 这里控制抓取数量
+      limit: 40, 
       includeReplies: false, 
       includeMyRenotes: true 
     }),
@@ -71,11 +71,16 @@ const formatDate = (isoString) => {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #000000;
-            --card-bg: rgba(20, 20, 25, 0.2); 
-            --border: rgba(255, 255, 255, 0.08);        
-            --text-main: #ffffff;     
+            /* 回归 A.txt 的深色科技风配色 */
+            --bg-color: #050505; /*  */
+            
+            /* 卡片背景恢复为 0.6 透明度，更有质感 */
+            --card-bg: rgba(24, 24, 27, 0.6); /*  */
+            
+            --border: rgba(255, 255, 255, 0.1); /* [cite: 10] */   
+            --text-main: #e4e4e7;     
             --text-sub: #a1a1aa;      
+            
             --accent-gradient: linear-gradient(135deg, #4ade80 0%, #3b82f6 50%, #8b5cf6 100%);
         }
 
@@ -85,48 +90,16 @@ const formatDate = (isoString) => {
             padding: 0;
             color: var(--text-main);
             min-height: 100vh;
+            
+            /* --- 背景样式：严格使用 A.txt 版本 --- */
             background-color: var(--bg-color);
-            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 50% -10%, #1a2e25 0%, transparent 60%),
+                radial-gradient(circle at 90% 90%, #0f172a 0%, transparent 40%); /* [cite: 13] */
+            background-attachment: fixed; /* [cite: 14] */
         }
 
-        /* --- 极光背景 --- */
-        .ambient-light {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            z-index: -1;
-            overflow: hidden;
-            pointer-events: none;
-        }
-
-        .blob {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(120px);
-            mix-blend-mode: screen;
-        }
-
-        .blob-green {
-            top: -20%; left: -10%; width: 120vw; height: 120vh;
-            background: rgba(74, 222, 128, 0.18);
-            animation: flow-1 18s infinite alternate ease-in-out;
-        }
-        .blob-blue {
-            bottom: -20%; right: -10%; width: 130vw; height: 130vh;
-            background: rgba(59, 130, 246, 0.15);
-            animation: flow-2 22s infinite alternate ease-in-out;
-        }
-        .blob-purple {
-            top: 10%; left: 10%; width: 110vw; height: 110vh;
-            background: rgba(168, 85, 247, 0.15);
-            animation: flow-3 25s infinite alternate ease-in-out;
-        }
-
-        @keyframes flow-1 { 0% { transform: translate(0, 0); } 100% { transform: translate(10vw, 10vh); } }
-        @keyframes flow-2 { 0% { transform: translate(0, 0); } 100% { transform: translate(-10vw, -10vh); } }
-        @keyframes flow-3 { 0% { transform: translate(0, 0) rotate(0deg); } 100% { transform: translate(-5vw, 5vh) rotate(20deg); } }
-
-        /* ✅ 4. 入场动画：让内容优雅浮现 */
+        /* ✅ 入场动画：优雅上浮 */
         @keyframes fade-in-up {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
@@ -137,15 +110,12 @@ const formatDate = (isoString) => {
         .hero-section {
             padding: 80px 20px 40px;
             text-align: center;
-            position: relative;
-            z-index: 1;
             /* 标题优先加载动画 */
             animation: fade-in-up 0.8s ease-out forwards;
         }
 
         h1 { 
             font-size: 3.5rem; font-weight: 800; margin: 0 0 10px 0; letter-spacing: -1px; line-height: 1.1;
-            text-shadow: 0 5px 30px rgba(0,0,0,0.9);
         }
 
         .gradient-text {
@@ -153,73 +123,69 @@ const formatDate = (isoString) => {
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            filter: drop-shadow(0 0 25px rgba(74, 222, 128, 0.5));
+            filter: drop-shadow(0 0 30px rgba(74, 222, 128, 0.2));
         }
 
         .subtitle {
             font-family: 'JetBrains Mono', monospace; color: var(--text-sub); font-size: 1rem; margin-top: 15px;
-            background: rgba(0,0,0,0.4); display: inline-block; padding: 5px 10px; border-radius: 4px;
+            opacity: 0.8;
         }
         
         .status-badge {
-            display: inline-block; background: rgba(74, 222, 128, 0.1); color: #4ade80;
+            display: inline-block; background: rgba(74, 222, 128, 0.05); color: #4ade80;
             padding: 6px 12px; border-radius: 99px; font-size: 0.8rem;
-            font-family: 'JetBrains Mono', monospace; border: 1px solid rgba(74, 222, 128, 0.3);
+            font-family: 'JetBrains Mono', monospace; border: 1px solid rgba(74, 222, 128, 0.2);
             margin-bottom: 20px; backdrop-filter: blur(4px);
-            box-shadow: 0 0 15px rgba(74, 222, 128, 0.1);
         }
 
         .layout-grid {
             display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start;
-            position: relative; z-index: 1;
         }
 
         .column-header {
             font-family: 'JetBrains Mono', monospace; color: var(--text-sub); font-size: 0.85em;
             margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1px;
-            display: flex; align-items: center; gap: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            display: flex; align-items: center; gap: 8px;
             animation: fade-in-up 1s ease-out forwards;
         }
         .column-header::before {
-            content: ''; width: 8px; height: 8px; background: #4ade80; border-radius: 50%; box-shadow: 0 0 10px #4ade80;
+            content: ''; width: 8px; height: 8px; background: var(--text-sub); border-radius: 50%; box-shadow: 0 0 10px var(--text-sub);
         }
 
         .card {
             background: var(--card-bg);
-            backdrop-filter: blur(25px) saturate(120%); -webkit-backdrop-filter: blur(25px) saturate(120%);
-            border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px;
-            position: relative; overflow: hidden; transition: all 0.3s ease;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px;
+            position: relative; overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             
-            /* 给所有卡片加初始透明，配合 JS 实现交错加载 */
+            /* 初始透明，等待动画执行 */
             opacity: 0; 
             animation: fade-in-up 0.6s ease-out forwards;
         }
 
         .card:hover {
-            transform: translateY(-4px); border-color: rgba(74, 222, 128, 0.4); 
-            box-shadow: 0 10px 50px -10px rgba(0, 0, 0, 0.5); background: rgba(30, 30, 35, 0.3); 
+            transform: translateY(-4px); border-color: rgba(74, 222, 128, 0.5); 
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5); background: rgba(24, 24, 27, 0.8); 
         }
         
         .card::before {
             content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(74, 222, 128, 0.5), transparent);
-            opacity: 0; transition: opacity 0.3s;
+            background: var(--accent-gradient); opacity: 0; transition: opacity 0.3s;
         }
         .card:hover::before { opacity: 1; }
 
         .user-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-        .avatar { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; border: 2px solid rgba(255,255,255,0.1); }
-        .username { font-weight: 700; color: #fff; font-size: 1rem; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .avatar { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 2px solid rgba(255,255,255,0.1); }
+        .username { font-weight: 700; color: var(--text-main); font-size: 1rem; }
         
-        .text-content { line-height: 1.7; color: #e4e4e7; font-size: 0.95rem; margin-bottom: 16px; }
+        .text-content { line-height: 1.7; color: #d4d4d8; font-size: 0.95rem; margin-bottom: 16px; }
         
         .renote-box {
-            background: rgba(0,0,0,0.25); border-left: 2px solid #a1a1aa; padding: 12px; margin-bottom: 12px;
+            background: rgba(0,0,0,0.2); border-left: 2px solid #a1a1aa; padding: 12px; margin-bottom: 12px;
             border-radius: 0 8px 8px 0; font-size: 0.9em; color: var(--text-sub); font-family: 'JetBrains Mono', monospace;
         }
 
-        .media-grid { display: grid; gap: 4px; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+        .media-grid { display: grid; gap: 4px; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
         .media-grid[data-count="1"] { grid-template-columns: 1fr; }
         .media-grid[data-count="2"] { grid-template-columns: 1fr 1fr; }
         .media-grid[data-count="3"], .media-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
@@ -233,13 +199,13 @@ const formatDate = (isoString) => {
         .card-footer { 
             padding-top: 16px; border-top: 1px solid var(--border); 
             display: flex; justify-content: space-between; align-items: center;
-            font-size: 0.8em; color: #a1a1aa; font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8em; color: #71717a; font-family: 'JetBrains Mono', monospace;
         }
         .original-link { 
-            color: #fff; text-decoration: none; font-weight: 600; padding: 4px 10px; border-radius: 4px;
-            background: rgba(255,255,255,0.1); transition: background 0.2s;
+            color: var(--text-main); text-decoration: none; font-weight: 600; padding: 4px 10px; border-radius: 4px;
+            background: rgba(255,255,255,0.05); transition: background 0.2s;
         }
-        .original-link:hover { background: rgba(74, 222, 128, 0.2); }
+        .original-link:hover { background: rgba(255,255,255,0.1); }
 
         #lightbox {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9);
@@ -260,12 +226,6 @@ const formatDate = (isoString) => {
     </style>
 </head>
 <body>
-
-    <div class="ambient-light">
-        <div class="blob blob-green"></div>
-        <div class="blob blob-blue"></div>
-        <div class="blob blob-purple"></div>
-    </div>
 
     <section class="hero-section">
         <div class="status-badge">● System Online</div>
