@@ -1,17 +1,462 @@
 ---
+// src/pages/index.astro
 
+// --- 1. 配置区域 ---
+const INSTANCE = 'https://sshup.com'; 
+const USER_ID = 'aid0j1fyuf3i0003'; 
+// -----------------
+
+let mediaNotes = []; 
+let textNotes = [];
+let errorMsg = '';
+
+try {
+  const response = await fetch(`${INSTANCE}/api/users/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId: USER_ID,
+      limit: 40,
+      includeReplies: false, 
+      includeMyRenotes: true 
+    }),
+  });
+
+  if (!response.ok) throw new Error('API 请求失败');
+  const allNotes = await response.json();
+
+  allNotes.forEach(note => {
+    const target = note.renote || note;
+    const hasMedia = target.files && target.files.length > 0;
+    if (hasMedia) {
+      mediaNotes.push(note);
+    } else {
+      textNotes.push(note);
+    }
+  });
+
+} catch (e) {
+  errorMsg = 'System Malfunction: 无法连接联邦宇宙信号。';
+  console.error(e);
+}
+
+const formatDate = (isoString) => {
+    return new Date(isoString).toLocaleDateString('zh-CN', {
+        month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'
+    });
+};
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
+<html lang="zh-cn">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>否极泰来 | Digital Garden</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --card-bg: rgba(24, 24, 27, 0.6); 
+            --border: rgba(255, 255, 255, 0.1);        
+            --text-main: #e4e4e7;     
+            --text-sub: #a1a1aa;      
+            --accent-gradient: linear-gradient(135deg, #4ade80 0%, #3b82f6 50%, #8b5cf6 100%);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            margin: 0; 
+            padding: 0;
+            color: var(--text-main);
+            min-height: 100vh;
+            background-color: var(--bg-color);
+            overflow-x: hidden; /* 防止光球飘出屏幕导致出现横向滚动条 */
+        }
+
+        /* --- 核心动画：背景光球 --- */
+        .ambient-light {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -1; /* 放在最底层 */
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px); /* 极度模糊，制造光晕感 */
+            opacity: 0.6;
+        }
+
+        /* 顶部绿色极光 */
+        .blob-green {
+            top: -10%;
+            left: 20%;
+            width: 50vw;
+            height: 50vw;
+            background: #1a2e25;
+            /* 混合模式：让颜色叠加更自然 */
+            mix-blend-mode: screen; 
+            animation: drift-slow 20s infinite alternate ease-in-out;
+        }
+
+        /* 底部蓝色极光 */
+        .blob-blue {
+            bottom: -10%;
+            right: -10%;
+            width: 60vw;
+            height: 60vw;
+            background: #0f172a;
+            mix-blend-mode: screen;
+            animation: drift-reverse 25s infinite alternate ease-in-out;
+        }
+
+        /* 增加一个中间的紫色点缀，增加层次 */
+        .blob-purple {
+            top: 40%;
+            left: 40%;
+            width: 40vw;
+            height: 40vw;
+            background: rgba(88, 28, 135, 0.15);
+            animation: drift-center 30s infinite alternate ease-in-out;
+        }
+
+        /* --- 动画关键帧 --- */
+        @keyframes drift-slow {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(50px, 30px) scale(1.1); }
+        }
+        @keyframes drift-reverse {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(-60px, -40px) scale(1.15); }
+        }
+        @keyframes drift-center {
+            0% { transform: translate(-20px, -20px) scale(0.9); opacity: 0.3; }
+            50% { opacity: 0.5; }
+            100% { transform: translate(40px, 40px) scale(1.1); opacity: 0.3; }
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .hero-section {
+            padding: 80px 20px 40px;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        h1 { 
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin: 0 0 10px 0;
+            letter-spacing: -1px;
+            line-height: 1.1;
+        }
+
+        .gradient-text {
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 0 30px rgba(74, 222, 128, 0.2));
+        }
+
+        .subtitle {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-sub);
+            font-size: 1rem;
+            margin-top: 15px;
+            opacity: 0.8;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            background: rgba(74, 222, 128, 0.05);
+            color: #4ade80;
+            padding: 6px 12px;
+            border-radius: 99px;
+            font-size: 0.8rem;
+            font-family: 'JetBrains Mono', monospace;
+            border: 1px solid rgba(74, 222, 128, 0.2);
+            margin-bottom: 20px;
+            backdrop-filter: blur(4px);
+        }
+
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr; 
+            gap: 24px;
+            align-items: start;
+            position: relative;
+            z-index: 1; /* 确保内容在光球之上 */
+        }
+
+        .column-header {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-sub);
+            font-size: 0.85em;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .column-header::before {
+            content: '';
+            width: 8px; height: 8px;
+            background: var(--text-sub);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--text-sub);
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px); 
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(74, 222, 128, 0.5); 
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+            background: rgba(24, 24, 27, 0.8); 
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .card:hover::before { opacity: 1; }
+
+        .user-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .avatar { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 2px solid rgba(255,255,255,0.1); }
+        .username { font-weight: 700; color: var(--text-main); font-size: 1rem; }
+        
+        .text-content { 
+            line-height: 1.7; 
+            color: #d4d4d8;
+            font-size: 0.95rem;
+            margin-bottom: 16px;
+        }
+        
+        .renote-box {
+            background: rgba(0,0,0,0.2);
+            border-left: 2px solid #a1a1aa;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.9em;
+            color: var(--text-sub);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .media-grid { 
+            display: grid; 
+            gap: 4px; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            margin-bottom: 16px;
+        }
+        .media-grid[data-count="1"] { grid-template-columns: 1fr; }
+        .media-grid[data-count="2"] { grid-template-columns: 1fr 1fr; }
+        .media-grid[data-count="3"], .media-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
+
+        .media-item {
+            width: 100%;
+            height: 220px; 
+            object-fit: cover;
+            cursor: zoom-in; 
+            transition: opacity 0.2s;
+            background: #27272a;
+        }
+        .media-item:hover { opacity: 0.8; }
+
+        .card-footer { 
+            padding-top: 16px; 
+            border-top: 1px solid var(--border); 
+            display: flex;
+            justify-content: space-between; 
+            align-items: center;
+            font-size: 0.8em;
+            color: #71717a;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .original-link { 
+            color: var(--text-main); 
+            text-decoration: none; 
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.05);
+            transition: background 0.2s;
+        }
+        .original-link:hover { background: rgba(255,255,255,0.1); }
+
+        #lightbox {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            backdrop-filter: blur(20px);
+        }
+        #lightbox.active { opacity: 1; pointer-events: all; }
+        #lightbox img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            border: 1px solid #333;
+        }
+
+        @media (max-width: 768px) {
+            .layout-grid { grid-template-columns: 1fr; }
+            h1 { font-size: 2.5rem; }
+            .hero-section { padding: 40px 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ambient-light">
+        <div class="blob blob-green"></div>
+        <div class="blob blob-blue"></div>
+        <div class="blob blob-purple"></div>
+    </div>
+
+    <section class="hero-section">
+        <div class="status-badge">● System Online</div>
+        <h1>
+            <span class="gradient-text">否极泰来</span>
+            <br />
+            <span style="color: white; font-size: 0.8em;">Universe</span>
+        </h1>
+        <div class="subtitle">
+            > connecting to fediverse...<br>
+            > fetching data from sshup.com...
+        </div>
+    </section>
+
+    <div class="container">
+        {errorMsg && <div style="background:rgba(127, 29, 29, 0.4); color:#fca5a5; padding:15px; border-radius:8px; text-align:center; border:1px solid #7f1d1d; margin-bottom:20px; backdrop-filter:blur(5px);">⚠️ {errorMsg}</div>}
+
+        <div class="layout-grid">
+            
+            <div class="column left">
+                <div class="column-header">/media/images</div>
+                {mediaNotes.map(note => {
+                    const target = note.renote || note;
+                    return (
+                        <article class="card">
+                            <div class="user-header">
+                                <img class="avatar" src={target.user.avatarUrl} loading="lazy"/>
+                                <span class="username">{target.user.name || target.user.username}</span>
+                            </div>
+
+                            {target.text && <div class="text-content">{target.text}</div>}
+
+                            {target.files && (
+                                <div class="media-grid" data-count={target.files.length}>
+                                    {target.files.map(file => (
+                                        file.type.startsWith('image') ?
+                                        <img 
+                                            src={file.thumbnailUrl || file.url} 
+                                            class="media-item" 
+                                            loading="lazy"
+                                            data-full-src={file.url} 
+                                        /> :
+                                        <video src={file.url} controls style="width:100%"></video>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div class="card-footer">
+                                <span class="date">{formatDate(note.createdAt)}</span>
+                                <a href={`${INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                            </div>
+                        </article>
+                    )
+                })}
+            </div>
+
+            <div class="column right">
+                <div class="column-header">/var/log/thoughts</div>
+                {textNotes.map(note => {
+                    const isRenote = !!note.renote;
+                    const target = isRenote ? note.renote : note;
+
+                    return (
+                        <article class="card">
+                            {isRenote && <div class="renote-box">🔄 FWD: re-transmission</div>}
+                            
+                            <div class="user-header">
+                                <img class="avatar" src={target.user.avatarUrl} loading="lazy"/>
+                                <div class="username">{target.user.name || target.user.username}</div>
+                            </div>
+
+                            <div class="text-content">{target.text}</div>
+
+                            {isRenote && note.text && (
+                                <div class="renote-box">
+                                    // comment: <br>
+                                    {note.text}
+                                </div>
+                            )}
+
+                            <div class="card-footer">
+                                <span class="date">{formatDate(note.createdAt)}</span>
+                                <a href={`${INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                            </div>
+                        </article>
+                    )
+                })}
+            </div>
+
+        </div>
+    </div>
+
+    <div id="lightbox">
+        <img id="lightbox-img" src="" alt="Full view" />
+    </div>
+
+    <script>
+        const lightbox = document.getElementById('lightbox');
+        const lightboxImg = document.getElementById('lightbox-img');
+        const images = document.querySelectorAll('.media-item');
+
+        images.forEach(img => {
+            img.addEventListener('click', (e) => {
+                const fullSrc = e.target.getAttribute('data-full-src');
+                lightboxImg.src = fullSrc;
+                lightbox.classList.add('active');
+            });
+        });
+
+        lightbox.addEventListener('click', () => {
+            lightbox.classList.remove('active');
+            setTimeout(() => { lightboxImg.src = ''; }, 200);
+        });
+    </script>
+
+</body>
 </html>
