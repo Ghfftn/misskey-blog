@@ -1,10 +1,10 @@
+// src/pages/rss.xml.js
 import rss from '@astrojs/rss';
 
 const INSTANCE = 'https://sshup.com';
 const USER_ID = 'aid0j1fyuf3i0003';
 const SITE_TITLE = '否极泰来 | Universe';
 const SITE_DESC = 'Connecting to fediverse...';
-// 统一图标
 const SITE_ICON = 'https://sshup.com/files/thumbnail-b457fa5b-1189-427d-baa7-389673f93283';
 
 export async function GET(context) {
@@ -12,7 +12,10 @@ export async function GET(context) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      userId: USER_ID, limit: 20, includeReplies: false, includeMyRenotes: true
+      userId: USER_ID,
+      limit: 20,
+      includeReplies: false,
+      includeMyRenotes: true
     }),
   });
   const notes = await response.json();
@@ -21,16 +24,21 @@ export async function GET(context) {
     title: SITE_TITLE,
     description: SITE_DESC,
     site: context.site || 'https://blog.sshup.com',
-    // 尝试添加图标（注意：只有部分RSS阅读器支持显示这个）
-    image: {
-        url: SITE_ICON,
-        title: SITE_TITLE,
-        link: 'https://blog.sshup.com'
-    },
+    // 强制插入标准的 RSS 图片标签
+    customData: `
+      <image>
+        <url>${SITE_ICON}</url>
+        <title>${SITE_TITLE}</title>
+        <link>${context.site || 'https://blog.sshup.com'}</link>
+      </image>
+    `,
     items: notes.map((note) => {
       const target = note.renote || note;
       const isRenote = !!note.renote;
       
+      // 如果是回复贴（双重过滤），虽然API过滤了，防止漏网
+      if (target.replyId) return null;
+
       let title = target.text 
         ? target.text.substring(0, 30) + (target.text.length > 30 ? '...' : '')
         : (target.files && target.files.length > 0 ? '[分享图片]' : '[无标题动态]');
@@ -43,6 +51,6 @@ export async function GET(context) {
         description: target.text || '点击查看图片内容',
         link: `${INSTANCE}/notes/${note.id}`,
       };
-    }),
+    }).filter(item => item !== null), // 过滤掉上面可能产生的 null
   });
 }

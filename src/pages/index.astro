@@ -4,11 +4,38 @@
 const INSTANCE = 'https://sshup.com'; 
 const USER_ID = 'aid0j1fyuf3i0003'; 
 const SITE_TITLE = '否极泰来 | Universe';
+const SITE_DESC = 'Connecting to fediverse... | Misskey 动态同步';
 const SITE_ICON = 'https://sshup.com/files/thumbnail-b457fa5b-1189-427d-baa7-389673f93283';
+const SITE_URL = 'https://blog.sshup.com';
 
 let mediaNotes = []; 
 let textNotes = [];
 let errorMsg = '';
+
+// --- 文本处理函数：链接高亮 + 换行处理 ---
+const formatNoteText = (text) => {
+    if (!text) return '';
+    
+    // 1. 防止 XSS 攻击（基础转义）
+    let formatted = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    // 2. 将 URL 转换为链接
+    // 识别 http/https 开头的链接
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    formatted = formatted.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank" class="note-link">${url}</a>`;
+    });
+
+    // 3. 处理换行符 (Misskey 使用 \n)
+    formatted = formatted.replace(/\n/g, '<br>');
+
+    return formatted;
+};
 
 try {
   const response = await fetch(`${INSTANCE}/api/users/notes`, {
@@ -17,7 +44,7 @@ try {
     body: JSON.stringify({
       userId: USER_ID,
       limit: 60,
-      includeReplies: false, 
+      includeReplies: false, // API 层过滤回复
       includeMyRenotes: true 
     }),
   });
@@ -27,6 +54,11 @@ try {
 
   allNotes.forEach(note => {
     const target = note.renote || note;
+    
+    // --- 核心过滤：彻底不显示回复贴 ---
+    // 如果这个贴子有 replyId，说明它是回复别人的，直接跳过
+    if (target.replyId) return;
+
     const hasMedia = target.files && target.files.length > 0;
     if (hasMedia) mediaNotes.push(note);
     else textNotes.push(note);
@@ -50,6 +82,18 @@ const formatDate = (isoString) => {
     <title>{SITE_TITLE}</title>
     <link rel="icon" href={SITE_ICON} />
     <link rel="alternate" type="application/rss+xml" title="RSS Feed" href="/rss.xml" />
+    
+    <meta name="description" content={SITE_DESC} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={SITE_TITLE} />
+    <meta property="og:description" content={SITE_DESC} />
+    <meta property="og:url" content={SITE_URL} />
+    <meta property="og:image" content={SITE_ICON} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={SITE_TITLE} />
+    <meta name="twitter:description" content={SITE_DESC} />
+    <meta name="twitter:image" content={SITE_ICON} />
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
     <style>
@@ -61,6 +105,19 @@ const formatDate = (isoString) => {
             --text-sub: #a1a1aa;      
             --terminal-green: #39ff14; 
             --accent-gradient: linear-gradient(135deg, #4ade80 0%, #3b82f6 50%, #8b5cf6 100%);
+            /* 链接颜色 */
+            --link-color: #3b82f6; 
+        }
+
+        /* 全局链接样式 (针对动态内容里的链接) */
+        :global(.note-link) {
+            color: var(--link-color);
+            text-decoration: none;
+            word-break: break-all; /* 防止长链接撑破卡片 */
+        }
+        :global(.note-link:hover) {
+            text-decoration: underline;
+            color: #60a5fa;
         }
 
         body { 
@@ -100,8 +157,6 @@ const formatDate = (isoString) => {
             filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5));
         }
         
-        /* Subtitle 已删除 */
-
         .header-right { display: flex; align-items: center; gap: 15px; }
 
         .status-badge {
@@ -159,7 +214,15 @@ const formatDate = (isoString) => {
         .user-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
         .avatar { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
         .username { font-weight: 700; font-size: 0.95rem; }
-        .text-content { line-height: 1.6; color: #d4d4d8; font-size: 0.9rem; margin-bottom: 12px; }
+        
+        .text-content { 
+            line-height: 1.6; 
+            color: #d4d4d8; 
+            font-size: 0.9rem; 
+            margin-bottom: 12px; 
+            /* 允许文本内的链接换行 */
+            overflow-wrap: break-word; 
+        }
         
         .renote-box { 
             background: rgba(0,0,0,0.3); border-left: 2px solid #555; padding: 10px; margin-bottom: 10px; 
@@ -173,27 +236,14 @@ const formatDate = (isoString) => {
         .media-item { width: 100%; height: 180px; object-fit: cover; cursor: zoom-in; background: #222; transition: opacity 0.2s; }
         .media-item:hover { opacity: 0.8; }
 
-        /* 底部样式修改 */
         .card-footer { 
             padding-top: 12px; border-top: 1px solid var(--border); 
             display: flex; justify-content: space-between; align-items: center; 
             font-size: 0.75em; color: #666; font-family: 'JetBrains Mono', monospace; 
         }
         
-        /* 底部右侧容器，用于包裹 图标 和 按钮 */
-        .footer-right {
-            display: flex;
-            align-items: center;
-            gap: 12px; /* 图标和按钮之间的距离 */
-        }
-
-        /* 转发图标样式 */
-        .renote-icon-svg {
-            width: 16px; 
-            height: 16px; 
-            fill: var(--text-sub); 
-            opacity: 0.7;
-        }
+        .footer-right { display: flex; align-items: center; gap: 12px; }
+        .renote-icon-svg { width: 16px; height: 16px; fill: var(--text-sub); opacity: 0.7; }
 
         .original-link { color: #fff; text-decoration: none; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
         .original-link:hover { background: var(--terminal-green); color: #000; }
@@ -234,14 +284,19 @@ const formatDate = (isoString) => {
             {errorMsg && <div style="color:red; margin-bottom:20px;">{errorMsg}</div>}
             {mediaNotes.map((note, index) => {
                 const target = note.renote || note;
-                const isRenote = !!note.renote; // 检查是否为转发
+                const isRenote = !!note.renote;
                 return (
                     <article class="card" style={`animation-delay: ${index * 0.05}s`}>
                         <div class="user-header">
                             <img class="avatar" src={target.user.avatarUrl} loading="lazy"/>
                             <span class="username">{target.user.name || target.user.username}</span>
                         </div>
-                        {target.text && <div class="text-content">{target.text}</div>}
+                        
+                        {/* 这里使用了 formatNoteText 来处理链接 */}
+                        {target.text && (
+                            <div class="text-content" set:html={formatNoteText(target.text)}></div>
+                        )}
+
                         {target.files && (
                             <div class="media-grid" data-count={target.files.length}>
                                 {target.files.map(file => (
@@ -277,10 +332,16 @@ const formatDate = (isoString) => {
                             <img class="avatar" src={target.user.avatarUrl} loading="lazy"/>
                             <div class="username">{target.user.name || target.user.username}</div>
                         </div>
-                        <div class="text-content">{target.text}</div>
-                        {isRenote && note.text && (
-                            <div class="renote-box"> // comment: <br> {note.text} </div>
+                        
+                        {/* 文本区域现在支持链接了 */}
+                        {target.text && (
+                            <div class="text-content" set:html={formatNoteText(target.text)}></div>
                         )}
+                        
+                        {isRenote && note.text && (
+                            <div class="renote-box" set:html={`// comment: <br> ${formatNoteText(note.text)}`}></div>
+                        )}
+                        
                         <div class="card-footer">
                             <span class="date">{formatDate(note.createdAt)}</span>
                             <div class="footer-right">
