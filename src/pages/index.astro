@@ -160,13 +160,12 @@ const marqueeItems = [
             display: flex; flex-direction: column;
         }
 
-        /* --- 全局统一 Header --- */
         .header-bar {
             position: fixed; 
             top: 0; left: 0; width: 100%;
             height: 80px; 
             padding: 0 30px; 
-            background: rgba(5,5,5,0.6); /* 毛玻璃背景 */
+            background: rgba(5,5,5,0.6); 
             backdrop-filter: blur(20px); 
             border-bottom: 1px solid rgba(255,255,255,0.05);
             display: flex; justify-content: space-between; align-items: center;
@@ -255,11 +254,10 @@ const marqueeItems = [
             height: 100vh;
         }
         
-        /* 桌面端：内容在 scroll-column 内部滚动 */
         .scroll-column { 
             height: 100%; 
             overflow-y: auto; 
-            padding: 100px 20px 40px 20px; /* 顶部预留空间给浮动 Header */
+            padding: 100px 20px 40px 20px;
             scroll-behavior: smooth; 
             scrollbar-width: thin; 
             scrollbar-color: rgba(255,255,255,0.1) transparent; 
@@ -278,12 +276,32 @@ const marqueeItems = [
         .username { font-weight: 700; font-size: 0.95rem; color: var(--userColor); }
         .text-content { line-height: 1.6; color: var(--text-main); font-size: 0.9rem; margin-bottom: 12px; overflow-wrap: break-word; }
         .renote-box { background: rgba(0,0,0,0.3); border-left: 2px solid #555; padding: 10px; margin-bottom: 10px; font-size: 0.85em; color: #999; font-family: 'JetBrains Mono', monospace; }
+        
+        /* --- 🖼️ 图片网格 & 高度优化 --- */
         .media-grid { display: grid; gap: 4px; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
         .media-grid[data-count="1"] { grid-template-columns: 1fr; }
         .media-grid[data-count="2"] { grid-template-columns: 1fr 1fr; }
         .media-grid[data-count="3"], .media-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
-        .media-item { width: 100%; height: 180px; object-fit: cover; cursor: zoom-in; background: #222; transition: opacity 0.2s; }
+        
+        /* 默认图片样式（多图时）：稍微增高，保持整齐 */
+        .media-item { 
+            width: 100%; 
+            height: 200px; /* 改为 200px，比之前 180px 稍微大气一点 */
+            object-fit: cover; 
+            cursor: zoom-in; 
+            background: #222; 
+            transition: opacity 0.2s; 
+        }
+        
+        /* 关键修改：单张图片时，高度自适应，展示全图 */
+        .media-grid[data-count="1"] .media-item {
+            height: auto;       /* 自动高度 */
+            max-height: 650px;  /* 限制最大高度，防止超长图霸屏 */
+            object-fit: cover;
+        }
+
         .media-item:hover { opacity: 0.8; }
+        
         .card-footer { padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #666; font-family: 'JetBrains Mono', monospace; }
         .footer-right { display: flex; align-items: center; gap: 12px; }
         .renote-icon-svg { width: 16px; height: 16px; fill: var(--text-sub); opacity: 0.7; }
@@ -301,7 +319,6 @@ const marqueeItems = [
             .header-bar { padding: 0 15px; }
             .header-marquee { display: none; }
             
-            /* 手机端：容器高度自动，允许溢出 */
             .dashboard-container { 
                 display: block; 
                 padding-top: 0; 
@@ -309,7 +326,6 @@ const marqueeItems = [
                 overflow: visible;
             }
             
-            /* 手机端：内容区也解除锁定 */
             .scroll-column { 
                 height: auto; 
                 overflow: visible; 
