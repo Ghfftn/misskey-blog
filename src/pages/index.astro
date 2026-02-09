@@ -20,6 +20,9 @@ let mediaNotes = [];
 let textNotes = [];
 let errorMsg = '';
 
+// 1. 定义默认描述 (如果抓取失败显示这个)
+let dynamicDesc = CONFIG.SITE_DESC; 
+
 try {
   const response = await fetch(`${CONFIG.INSTANCE}/api/users/notes`, {
     method: "POST",
@@ -34,6 +37,24 @@ try {
 
   if (!response.ok) throw new Error('API Error');
   const allNotes = await response.json();
+
+  // 2. 核心修改：提取最新一条动态作为 SEO 描述
+  if (allNotes && allNotes.length > 0) {
+      const latest = allNotes[0].renote || allNotes[0];
+      // 如果有文字就取文字，没文字(纯图)就显示默认提示
+      let rawText = latest.text || (latest.files.length > 0 ? `[分享了 ${latest.files.length} 张图片]` : '');
+      
+      // 清理换行符，截取前 120 个字，防止太长
+      if (rawText) {
+          rawText = rawText.replace(/\n/g, ' '); 
+          dynamicDesc = rawText.length > 120 ? rawText.substring(0, 117) + '...' : rawText;
+          
+          // 如果是转发，加个前缀
+          if (allNotes[0].renote) {
+              dynamicDesc = `🔄 转发: ${dynamicDesc}`;
+          }
+      }
+  }
 
   allNotes.forEach(note => {
     const target = note.renote || note;
@@ -52,7 +73,6 @@ const formatDate = (isoString) => {
     });
 };
 
-// 组合完整标题用于 SEO
 const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
 ---
 
@@ -64,15 +84,16 @@ const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
     <link rel="icon" href={CONFIG.SITE_ICON} />
     <link rel="alternate" type="application/rss+xml" title="RSS Feed" href="/rss.xml" />
     
-    <meta name="description" content={CONFIG.SITE_DESC} />
+    <meta name="description" content={dynamicDesc} />
+    
     <meta property="og:type" content="website" />
     <meta property="og:title" content={PAGE_TITLE} />
-    <meta property="og:description" content={CONFIG.SITE_DESC} />
+    <meta property="og:description" content={dynamicDesc} />
     <meta property="og:image" content={CONFIG.SITE_ICON} />
     
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={PAGE_TITLE} />
-    <meta name="twitter:description" content={CONFIG.SITE_DESC} />
+    <meta name="twitter:description" content={dynamicDesc} />
     <meta name="twitter:image" content={CONFIG.SITE_ICON} />
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -115,10 +136,9 @@ const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
             font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.5px;
             background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5));
-            display: flex; align-items: center; gap: 10px; /* 让标题和副标题在一行或者组合 */
+            display: flex; align-items: center; gap: 10px;
         }
         
-        /* 副标题样式 */
         .header-subtitle {
             font-size: 0.8rem; font-weight: 400; color: var(--text-sub); 
             font-family: 'JetBrains Mono', monospace; opacity: 0.7;
