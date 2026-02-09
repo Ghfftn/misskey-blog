@@ -147,27 +147,45 @@ const marqueeItems = [
         :global(.note-link) { color: var(--link-color); text-decoration: none; word-break: break-all; }
         :global(.note-link:hover) { text-decoration: underline; color: #60a5fa; }
 
+        /* --- 🖥️ 电脑端默认样式 --- */
+        html {
+            height: 100%;
+            overflow: hidden; 
+        }
+
         body { 
             font-family: 'Inter', sans-serif; margin: 0; padding: 0;
             color: var(--text-main); 
-            height: 100vh; /* 桌面端：锁定高度 */
+            height: 100vh;
+            overflow: hidden; 
+            
             background-color: var(--bg-color);
             background-image: 
                 radial-gradient(circle at 50% -10%, var(--glowColor) 0%, transparent 60%),
                 radial-gradient(circle at 90% 90%, #0f172a 0%, transparent 40%);
             background-attachment: fixed;
-            overflow: hidden; /* 桌面端：隐藏外部滚动 */
             display: flex; flex-direction: column;
         }
 
+        /* --- 顶部导航栏 (PC居中版) --- */
         .header-bar {
             position: fixed; 
-            top: 0; left: 0; width: 100%;
+            top: 0; 
+            
+            /* 居中核心代码：宽度70%，左移50%再回退50% */
+            width: 70%; 
+            left: 50%;
+            transform: translateX(-50%);
+            
             height: 80px; 
             padding: 0 30px; 
             background: rgba(5,5,5,0.6); 
             backdrop-filter: blur(20px); 
             border-bottom: 1px solid rgba(255,255,255,0.05);
+            /* 加左右边框 */
+            border-left: 1px solid rgba(255,255,255,0.05);
+            border-right: 1px solid rgba(255,255,255,0.05);
+            
             display: flex; justify-content: space-between; align-items: center;
             z-index: 50; 
             box-sizing: border-box; 
@@ -246,12 +264,19 @@ const marqueeItems = [
         }
         .rss-icon { width: 16px; height: 16px; fill: currentColor; }
 
+        /* --- 内容区域 (PC居中版) --- */
         .dashboard-container { 
             flex: 1; 
             display: grid; grid-template-columns: 1fr 1fr; gap: 0; 
             overflow: hidden; 
             padding-top: 0;
             height: 100vh;
+            
+            /* 居中核心代码 */
+            width: 70%; 
+            margin: 0 auto; 
+            border-left: 1px solid var(--border);
+            border-right: 1px solid var(--border);
         }
         
         .scroll-column { 
@@ -277,28 +302,14 @@ const marqueeItems = [
         .text-content { line-height: 1.6; color: var(--text-main); font-size: 0.9rem; margin-bottom: 12px; overflow-wrap: break-word; }
         .renote-box { background: rgba(0,0,0,0.3); border-left: 2px solid #555; padding: 10px; margin-bottom: 10px; font-size: 0.85em; color: #999; font-family: 'JetBrains Mono', monospace; }
         
-        /* --- 🖼️ 图片网格 & 高度优化 --- */
+        /* --- 🖼️ 图片样式 --- */
         .media-grid { display: grid; gap: 4px; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
         .media-grid[data-count="1"] { grid-template-columns: 1fr; }
         .media-grid[data-count="2"] { grid-template-columns: 1fr 1fr; }
         .media-grid[data-count="3"], .media-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
         
-        /* 默认图片样式（多图时）：稍微增高，保持整齐 */
-        .media-item { 
-            width: 100%; 
-            height: 200px; /* 改为 200px，比之前 180px 稍微大气一点 */
-            object-fit: cover; 
-            cursor: zoom-in; 
-            background: #222; 
-            transition: opacity 0.2s; 
-        }
-        
-        /* 关键修改：单张图片时，高度自适应，展示全图 */
-        .media-grid[data-count="1"] .media-item {
-            height: auto;       /* 自动高度 */
-            max-height: 650px;  /* 限制最大高度，防止超长图霸屏 */
-            object-fit: cover;
-        }
+        .media-item { width: 100%; height: 200px; object-fit: cover; cursor: zoom-in; background: #222; transition: opacity 0.2s; }
+        .media-grid[data-count="1"] .media-item { height: auto; max-height: 650px; object-fit: cover; }
 
         .media-item:hover { opacity: 0.8; }
         
@@ -307,29 +318,48 @@ const marqueeItems = [
         .renote-icon-svg { width: 16px; height: 16px; fill: var(--text-sub); opacity: 0.7; }
         .original-link { color: #fff; text-decoration: none; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
         .original-link:hover { background: var(--terminal-green); color: #000; }
-        #lightbox { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.2s; backdrop-filter: blur(10px); }
+        
+        #lightbox { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; backdrop-filter: blur(10px); }
         #lightbox.active { opacity: 1; pointer-events: all; }
-        #lightbox img { max-width: 95%; max-height: 95%; border-radius: 4px; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+        #lightbox img { max-width: 95%; max-height: 95%; border-radius: 4px; box-shadow: 0 0 30px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform: scale(0.95); }
+        #lightbox.active img.loaded { opacity: 1; transform: scale(1); }
+
+        .spinner { position: absolute; width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, 0.1); border-left-color: var(--terminal-green); border-radius: 50%; animation: spin 1s linear infinite; z-index: -1; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         @keyframes fade-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* --- 📱 移动端适配 --- */
         @media (max-width: 768px) {
-            body { height: auto; overflow: auto; display: block; }
+            /* 1. 强制解锁滚动权限 (核心修复) */
+            html, body {
+                height: auto !important;
+                overflow-y: auto !important;
+                display: block;
+                background-attachment: scroll; /* 修复移动端背景固定导致的卡顿 */
+            }
             
-            .header-bar { padding: 0 15px; }
+            /* 移动端 Header */
+            .header-bar { 
+                width: 100%; left: 0; transform: none; padding: 0 15px; 
+                border-left: none; border-right: none;
+            }
             .header-marquee { display: none; }
             
+            /* 2. 容器高度自适应，不锁死 */
             .dashboard-container { 
                 display: block; 
                 padding-top: 0; 
-                height: auto;
-                overflow: visible;
+                height: auto !important;
+                overflow: visible !important;
+                width: 100%; margin: 0; border: none;
             }
             
+            /* 3. 内容区通过 padding 避开 Header */
             .scroll-column { 
-                height: auto; 
-                overflow: visible; 
-                padding: 100px 15px 40px 15px; 
+                height: auto !important;
+                overflow: visible !important;
+                padding: 100px 15px 40px 15px !important; 
             }
             
             .column-left { border-right: none; border-bottom: 1px solid var(--border); }
@@ -422,18 +452,32 @@ const marqueeItems = [
             })}
         </div>
     </main>
-    <div id="lightbox"><img id="lightbox-img" src="" alt="Full view" /></div>
+    
+    <div id="lightbox">
+        <div class="spinner"></div>
+        <img id="lightbox-img" src="" alt="Full view" />
+    </div>
     
     <script>
         const lightbox = document.getElementById('lightbox');
         const lightboxImg = document.getElementById('lightbox-img');
+
         document.querySelectorAll('.media-item').forEach(img => {
             img.addEventListener('click', (e) => {
+                lightboxImg.classList.remove('loaded');
                 lightboxImg.src = e.target.getAttribute('data-full-src');
                 lightbox.classList.add('active');
             });
         });
-        lightbox.addEventListener('click', () => lightbox.classList.remove('active'));
+
+        lightboxImg.onload = () => {
+            lightboxImg.classList.add('loaded');
+        };
+
+        lightbox.addEventListener('click', () => {
+            lightbox.classList.remove('active');
+            setTimeout(() => lightboxImg.classList.remove('loaded'), 300);
+        });
 
         const reactions = document.querySelectorAll('.reaction-item');
         function triggerPop(element) {
@@ -444,13 +488,15 @@ const marqueeItems = [
         reactions.forEach(item => {
             item.addEventListener('click', () => triggerPop(item));
         });
+        
+        // 修改这里：时间改成 800 (毫秒)
         setInterval(() => {
             const randomIndex = Math.floor(Math.random() * reactions.length);
             const randomItem = reactions[randomIndex];
             if (!randomItem.matches(':hover')) {
                 triggerPop(randomItem);
             }
-        }, 2000);
+        }, 800);
     </script>
 </body>
 </html>
