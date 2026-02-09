@@ -9,7 +9,7 @@ export const CONFIG = {
   // Example: @A@sshup.com
   // 格式：@用户名@实例域名
   // 填写后，系统会自动查找您的 UserID 并获取动态。
-  FEDIVERSE_HANDLE: '@netethan@mastodon.social',
+  FEDIVERSE_HANDLE: '@Rockndoll@misskey.de',
 
   // ==============================================================================
   // 2. SITE META (Website Information) | 网站元信息 (显示在浏览器标签页和分享卡片上)
