@@ -3,7 +3,7 @@ import rss from '@astrojs/rss';
 import { CONFIG } from '../config';
 
 export async function GET(context) {
-  // --- 1. 配置解析 (保持与主页逻辑一致) ---
+  // --- 1. 配置解析 ---
   const parseHandle = (handle) => {
       const clean = handle.startsWith('@') ? handle.slice(1) : handle;
       const parts = clean.split('@');
@@ -89,7 +89,7 @@ export async function GET(context) {
   }
 
   // --- 3. 生成 RSS ---
-  // 修复：删除了 SITE_SUBTITLE，只使用 SITE_TITLE
+  // 修复：只使用 SITE_TITLE，避免 undefined 错误
   const PAGE_TITLE = CONFIG.SITE_TITLE;
   const SITE_URL = context.site || 'https://blog.sshup.com';
 
@@ -106,17 +106,15 @@ export async function GET(context) {
       <generator>Misskey-Blog Astro</generator>
     `,
     items: rawNotes.map((note) => {
-      // 通用处理逻辑
       const target = note.renote || note;
       
-      // 标题处理：截取前30个字
       let title = target.text 
         ? target.text.substring(0, 50) + (target.text.length > 50 ? '...' : '')
         : (target.files && target.files.length > 0 ? '[分享图片]' : '[无标题动态]');
       
       if (!!note.renote) title = `🔄 转发: ${title}`;
 
-      // 链接处理：Misskey 和 Mastodon 链接格式不同，Mastodon 在数据获取时已处理，Misskey 在此补充
+      // 链接处理
       const link = note.url || `${INSTANCE_URL}/notes/${note.id}`;
 
       return {

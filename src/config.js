@@ -8,7 +8,7 @@ export const CONFIG = {
   // Format: @username@instance.domain
   // Example: @A@sshup.com
   // 格式：@用户名@实例域名
-  // 填写后，系统会自动查找您的 UserID 并获取动态。
+  // 填写后，系统会自动查找并获取动态。
   FEDIVERSE_HANDLE: '@A@sshup.com',
 
   // ==============================================================================
