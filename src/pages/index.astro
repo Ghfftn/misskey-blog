@@ -94,7 +94,6 @@ const formatDate = (isoString) => {
 
 const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
 
-// 拼接两遍走马灯内容以实现无缝循环
 const marqueeItems = [
     ...CONFIG.THEME.MARQUEE_TEXT,
     ...CONFIG.THEME.MARQUEE_TEXT
@@ -125,7 +124,7 @@ const marqueeItems = [
         titleFrom: CONFIG.THEME.TITLE_GRADIENT_FROM,
         titleTo: CONFIG.THEME.TITLE_GRADIENT_TO,
         hoverColor: CONFIG.THEME.BUTTON_HOVER_COLOR,
-        hoverBorder: CONFIG.THEME.BUTTON_HOVER_BORDER_COLOR, // 新增：边框颜色
+        hoverBorder: CONFIG.THEME.BUTTON_HOVER_BORDER_COLOR,
         glowColor: CONFIG.THEME.BACKGROUND_GLOW_COLOR,
         cardOpacity: CONFIG.THEME.CARD_OPACITY,
         userColor: CONFIG.THEME.USERNAME_COLOR,
@@ -139,7 +138,7 @@ const marqueeItems = [
             --text-sub: #a1a1aa;      
             
             --terminal-green: var(--hoverColor); 
-            --terminal-border: var(--hoverBorder); /* 注入边框变量 */
+            --terminal-border: var(--hoverBorder);
             
             --accent-gradient: linear-gradient(135deg, var(--titleFrom) 0%, var(--titleTo) 100%);
             --link-color: #3b82f6; 
@@ -159,11 +158,22 @@ const marqueeItems = [
             overflow: hidden; display: flex; flex-direction: column;
         }
 
+        /* --- ✨ 统一的悬浮毛玻璃 Header --- */
         .header-bar {
-            height: 80px; padding: 0 30px; 
+            /* 固定定位：让它浮在所有内容上方 */
+            position: fixed; 
+            top: 0; left: 0; width: 100%;
+            height: 80px; 
+            padding: 0 30px; 
+            
+            /* 毛玻璃核心 */
+            background: rgba(5,5,5,0.6); /* 通透的半透明黑 */
+            backdrop-filter: blur(20px);  /* 强力模糊背景 */
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            
             display: flex; justify-content: space-between; align-items: center;
-            border-bottom: none; background: transparent; z-index: 10; flex-shrink: 0;
-            background: linear-gradient(to bottom, rgba(5,5,5,0.8) 0%, rgba(5,5,5,0) 100%);
+            z-index: 50; /* 确保在最上层 */
+            box-sizing: border-box; /* 防止padding撑破宽度 */
             gap: 20px;
         }
 
@@ -173,13 +183,7 @@ const marqueeItems = [
             font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.5px;
             background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5));
-            display: flex; align-items: center; gap: 10px;
-        }
-        .header-subtitle {
-            font-size: 0.8rem; font-weight: 400; color: var(--text-sub); 
-            font-family: 'JetBrains Mono', monospace; opacity: 0.7;
-            border-left: 1px solid rgba(255,255,255,0.2); padding-left: 10px;
-            letter-spacing: 1px;
+            display: flex; align-items: center;
         }
 
         .header-marquee {
@@ -238,7 +242,6 @@ const marqueeItems = [
             background: rgba(0,0,0,0.2); backdrop-filter: blur(4px);
         }
         
-        /* 使用配置的悬停边框色 */
         .rss-btn:hover { 
             border-color: var(--terminal-border); 
             color: var(--terminal-green); 
@@ -246,8 +249,24 @@ const marqueeItems = [
         }
         .rss-icon { width: 16px; height: 16px; fill: currentColor; }
 
-        .dashboard-container { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0; overflow: hidden; padding-top: 10px; }
-        .scroll-column { height: 100%; overflow-y: auto; padding: 0 20px 40px 20px; scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
+        .dashboard-container { 
+            flex: 1; 
+            display: grid; grid-template-columns: 1fr 1fr; gap: 0; 
+            overflow: hidden; 
+            padding-top: 0; /* 删除了这里的 padding，改用 scroll-column 的 padding */
+            height: 100vh; /* 撑满屏幕 */
+        }
+        
+        .scroll-column { 
+            height: 100%; 
+            overflow-y: auto; 
+            /* 关键修改：增加顶部 padding，让内容从 Header 下方开始，但滚动时能穿过 Header */
+            padding: 100px 20px 40px 20px; 
+            scroll-behavior: smooth; 
+            scrollbar-width: thin; 
+            scrollbar-color: rgba(255,255,255,0.1) transparent; 
+        }
+        
         .scroll-column::-webkit-scrollbar { width: 4px; }
         .scroll-column::-webkit-scrollbar-track { background: transparent; }
         .scroll-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
@@ -280,10 +299,16 @@ const marqueeItems = [
 
         @media (max-width: 768px) {
             body { height: auto; overflow: auto; display: block; }
-            .header-bar { position: sticky; top: 0; padding: 0 15px; background: rgba(5,5,5,0.95); }
+            
+            /* 手机端现在只需要微调 padding，Header 样式已经全局统一 */
+            .header-bar { 
+                padding: 0 15px; 
+            }
+            
             .header-marquee { display: none; }
-            .dashboard-container { display: block; padding-top: 10px;}
-            .scroll-column { height: auto; overflow: visible; padding: 10px 15px; }
+            .dashboard-container { display: block; padding-top: 0; }
+            /* 手机端也需要同样的顶部内边距来避开 Header */
+            .scroll-column { height: auto; overflow: visible; padding: 100px 15px 40px 15px; }
             .column-left { border-right: none; border-bottom: 1px solid var(--border); }
         }
     </style>
@@ -291,10 +316,7 @@ const marqueeItems = [
 <body>
     <header class="header-bar">
         <div class="header-left">
-            <h1>
-                {CONFIG.SITE_TITLE}
-                <span class="header-subtitle">{CONFIG.SITE_SUBTITLE}</span>
-            </h1>
+            <h1>{CONFIG.SITE_TITLE}</h1>
         </div>
         
         <div class="header-marquee">
