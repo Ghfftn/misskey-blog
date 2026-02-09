@@ -78,41 +78,35 @@ const formatDate = (isoString) => {
             flex-direction: column;
         }
 
-        /* --- 1. 顶部 Header (彻底隐形) --- */
+        /* --- 1. 顶部 Header --- */
         .header-bar {
             height: 80px;
             padding: 0 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            /* 关键修改：去掉边框，去掉背景色，让它完全透明 */
             border-bottom: none; 
             background: transparent; 
             z-index: 10;
             flex-shrink: 0;
-            /* 稍微加一点点头部的渐变遮罩，防止文字和背景混在一起太难看，但非常淡 */
             background: linear-gradient(to bottom, rgba(5,5,5,0.8) 0%, rgba(5,5,5,0) 100%);
         }
 
-        .header-left { display: flex; flex-direction: column; }
+        .header-left { display: flex; flex-direction: column; justify-content: center; }
         
         h1 { 
             font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.5px;
             background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            /* 增加一点文字阴影，防止背景太亮看不清 */
             filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5));
         }
         
-        .subtitle {
-            font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-sub); margin-top: 4px;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-        }
+        /* Subtitle 已删除 */
 
         .header-right { display: flex; align-items: center; gap: 15px; }
 
         .status-badge {
             font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
-            color: var(--terminal-green); background: rgba(0, 0, 0, 0.3); /* 背景加深一点 */
+            color: var(--terminal-green); background: rgba(0, 0, 0, 0.3);
             padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(57, 255, 20, 0.2);
             display: flex; align-items: center; gap: 6px;
             backdrop-filter: blur(4px);
@@ -135,30 +129,23 @@ const formatDate = (isoString) => {
             grid-template-columns: 1fr 1fr;
             gap: 0;
             overflow: hidden;
-            /* 给整个内容区顶部加一点内边距，以免直接顶到 Header */
             padding-top: 10px; 
         }
 
         .scroll-column {
             height: 100%;
             overflow-y: auto;
-            /* 修改：去掉原来的内边距，让滚动条贴边，内容靠 padding 撑开 */
             padding: 0 20px 40px 20px; 
             scroll-behavior: smooth;
-            /* 关键：隐藏掉滚动条的轨道，让它看起来是悬浮的 */
             scrollbar-width: thin;
             scrollbar-color: rgba(255,255,255,0.1) transparent;
         }
 
-        /* Webkit 滚动条美化 */
         .scroll-column::-webkit-scrollbar { width: 4px; }
         .scroll-column::-webkit-scrollbar-track { background: transparent; }
         .scroll-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
 
-        .column-left { 
-            /* 关键修改：把实线边框改成更加隐蔽的渐变线，或者干脆只用一点点阴影 */
-            border-right: 1px solid rgba(255,255,255,0.05); 
-        }
+        .column-left { border-right: 1px solid rgba(255,255,255,0.05); }
 
         /* --- 3. 卡片样式 --- */
         .card {
@@ -166,7 +153,6 @@ const formatDate = (isoString) => {
             border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px;
             transition: all 0.2s ease;
             animation: fade-in-up 0.5s ease-out forwards; opacity: 0;
-            /* 确保内容不会贴到卡片边缘 */
         }
         .card:hover { transform: translateY(-2px); border-color: rgba(74, 222, 128, 0.4); background: rgba(30, 30, 35, 0.8); }
 
@@ -175,7 +161,6 @@ const formatDate = (isoString) => {
         .username { font-weight: 700; font-size: 0.95rem; }
         .text-content { line-height: 1.6; color: #d4d4d8; font-size: 0.9rem; margin-bottom: 12px; }
         
-        /* 删除了 'FWD:' 那个标记，只保留评论框 */
         .renote-box { 
             background: rgba(0,0,0,0.3); border-left: 2px solid #555; padding: 10px; margin-bottom: 10px; 
             font-size: 0.85em; color: #999; font-family: 'JetBrains Mono', monospace;
@@ -188,7 +173,28 @@ const formatDate = (isoString) => {
         .media-item { width: 100%; height: 180px; object-fit: cover; cursor: zoom-in; background: #222; transition: opacity 0.2s; }
         .media-item:hover { opacity: 0.8; }
 
-        .card-footer { padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 0.75em; color: #666; font-family: 'JetBrains Mono', monospace; }
+        /* 底部样式修改 */
+        .card-footer { 
+            padding-top: 12px; border-top: 1px solid var(--border); 
+            display: flex; justify-content: space-between; align-items: center; 
+            font-size: 0.75em; color: #666; font-family: 'JetBrains Mono', monospace; 
+        }
+        
+        /* 底部右侧容器，用于包裹 图标 和 按钮 */
+        .footer-right {
+            display: flex;
+            align-items: center;
+            gap: 12px; /* 图标和按钮之间的距离 */
+        }
+
+        /* 转发图标样式 */
+        .renote-icon-svg {
+            width: 16px; 
+            height: 16px; 
+            fill: var(--text-sub); 
+            opacity: 0.7;
+        }
+
         .original-link { color: #fff; text-decoration: none; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
         .original-link:hover { background: var(--terminal-green); color: #000; }
 
@@ -213,7 +219,6 @@ const formatDate = (isoString) => {
     <header class="header-bar">
         <div class="header-left">
             <h1>否极泰来 <span style="font-weight:300; opacity:0.7;">UNIVERSE</span></h1>
-            <div class="subtitle">> connecting to sshup.com...</div>
         </div>
         <div class="header-right">
             <div class="status-badge"><span class="status-dot"></span>SYSTEM ONLINE</div>
@@ -229,6 +234,7 @@ const formatDate = (isoString) => {
             {errorMsg && <div style="color:red; margin-bottom:20px;">{errorMsg}</div>}
             {mediaNotes.map((note, index) => {
                 const target = note.renote || note;
+                const isRenote = !!note.renote; // 检查是否为转发
                 return (
                     <article class="card" style={`animation-delay: ${index * 0.05}s`}>
                         <div class="user-header">
@@ -247,7 +253,14 @@ const formatDate = (isoString) => {
                         )}
                         <div class="card-footer">
                             <span class="date">{formatDate(note.createdAt)}</span>
-                            <a href={`${INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                            <div class="footer-right">
+                                {isRenote && (
+                                    <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                                    </svg>
+                                )}
+                                <a href={`${INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                            </div>
                         </div>
                     </article>
                 )
@@ -270,7 +283,14 @@ const formatDate = (isoString) => {
                         )}
                         <div class="card-footer">
                             <span class="date">{formatDate(note.createdAt)}</span>
-                            <a href={`${INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                            <div class="footer-right">
+                                {isRenote && (
+                                    <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                                    </svg>
+                                )}
+                                <a href={`${INSTANCE}/notes/${note.id}`} target="_blank" class="original-link">RAW ↗</a>
+                            </div>
                         </div>
                     </article>
                 )
