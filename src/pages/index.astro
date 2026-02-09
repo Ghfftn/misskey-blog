@@ -94,8 +94,7 @@ const formatDate = (isoString) => {
 
 const PAGE_TITLE = `${CONFIG.SITE_TITLE} | ${CONFIG.SITE_SUBTITLE}`;
 
-// --- 3. 生成无限滚动的走马灯列表 ---
-// 把用户配置的列表重复拼接一次，确保滚动时无缝衔接
+// 拼接两遍走马灯内容以实现无缝循环
 const marqueeItems = [
     ...CONFIG.THEME.MARQUEE_TEXT,
     ...CONFIG.THEME.MARQUEE_TEXT
@@ -126,6 +125,7 @@ const marqueeItems = [
         titleFrom: CONFIG.THEME.TITLE_GRADIENT_FROM,
         titleTo: CONFIG.THEME.TITLE_GRADIENT_TO,
         hoverColor: CONFIG.THEME.BUTTON_HOVER_COLOR,
+        hoverBorder: CONFIG.THEME.BUTTON_HOVER_BORDER_COLOR, // 新增：边框颜色
         glowColor: CONFIG.THEME.BACKGROUND_GLOW_COLOR,
         cardOpacity: CONFIG.THEME.CARD_OPACITY,
         userColor: CONFIG.THEME.USERNAME_COLOR,
@@ -139,6 +139,8 @@ const marqueeItems = [
             --text-sub: #a1a1aa;      
             
             --terminal-green: var(--hoverColor); 
+            --terminal-border: var(--hoverBorder); /* 注入边框变量 */
+            
             --accent-gradient: linear-gradient(135deg, var(--titleFrom) 0%, var(--titleTo) 100%);
             --link-color: #3b82f6; 
         }
@@ -198,7 +200,6 @@ const marqueeItems = [
             transition: all 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             opacity: 0.6; filter: grayscale(0.5);
             transform-origin: center center;
-            /* 允许文本不换行，防止短语被打断 */
             white-space: nowrap;
         }
         .reaction-item:hover { transform: scale(1.3); opacity: 1; filter: grayscale(0); }
@@ -236,7 +237,13 @@ const marqueeItems = [
             border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s;
             background: rgba(0,0,0,0.2); backdrop-filter: blur(4px);
         }
-        .rss-btn:hover { border-color: var(--terminal-green); color: var(--terminal-green); background: rgba(255, 255, 255, 0.05); }
+        
+        /* 使用配置的悬停边框色 */
+        .rss-btn:hover { 
+            border-color: var(--terminal-border); 
+            color: var(--terminal-green); 
+            background: rgba(255, 255, 255, 0.05); 
+        }
         .rss-icon { width: 16px; height: 16px; fill: currentColor; }
 
         .dashboard-container { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0; overflow: hidden; padding-top: 10px; }
@@ -247,7 +254,7 @@ const marqueeItems = [
         .column-left { border-right: 1px solid rgba(255,255,255,0.05); }
 
         .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; transition: all 0.2s ease; animation: fade-in-up 0.5s ease-out forwards; opacity: 0; }
-        .card:hover { transform: translateY(-2px); border-color: var(--terminal-green); background: rgba(30, 30, 35, 0.8); }
+        .card:hover { transform: translateY(-2px); border-color: var(--terminal-border); background: rgba(30, 30, 35, 0.8); }
 
         .user-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
         .avatar { width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
@@ -292,7 +299,6 @@ const marqueeItems = [
         
         <div class="header-marquee">
             <div class="marquee-track">
-                {/* 遍历用户自定义的列表 */}
                 {marqueeItems.map(item => (
                     <div class="reaction-item">{item}</div>
                 ))}
@@ -399,7 +405,7 @@ const marqueeItems = [
             if (!randomItem.matches(':hover')) {
                 triggerPop(randomItem);
             }
-        }, 800);
+        }, 2000);
     </script>
 </body>
 </html>
