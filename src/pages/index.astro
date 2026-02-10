@@ -23,6 +23,7 @@ let mediaNotes = [];
 let textNotes = [];
 let errorMsg = '';
 let dynamicDesc = CONFIG.SITE_DESC; 
+let dynamicImage = CONFIG.SITE_ICON; // 默认使用站点图标
 let platform = 'unknown'; 
 let userId = null; 
 
@@ -130,21 +131,47 @@ const formatDate = (isoString) => {
 };
 
 // ==============================================
-// 2. 数据处理与执行
+// 2. 数据处理与执行 (智能 SEO 生成)
 // ==============================================
 try {
   const allNotes = await fetchFediverseData();
   if (!allNotes || allNotes.length === 0) {
       errorMsg = 'No public posts found (Server-side)';
   } else {
-      const latest = allNotes[0].renote || allNotes[0];
-      let rawText = latest.isHtml ? latest.text.replace(/<[^>]+>/g, '') : (latest.text || '');
-      if (!rawText && latest.files.length > 0) rawText = `[Shared ${latest.files.length} images]`;
-      if (rawText) {
+      // --- 智能预览卡片逻辑 START ---
+      
+      // 策略1：优先寻找最新的“带图贴子”
+      const imageNote = allNotes.find(n => {
+          const target = n.renote || n;
+          return target.files && target.files.length > 0;
+      });
+
+      if (imageNote) {
+          // 找到了带图的贴子！用它的图和文
+          const target = imageNote.renote || imageNote;
+          dynamicImage = target.files[0].thumbnailUrl || target.files[0].url; // 使用第一张图
+          
+          let rawText = target.isHtml ? target.text.replace(/<[^>]+>/g, '') : (target.text || '');
+          if (!rawText) rawText = `[分享了 ${target.files.length} 张图片]`;
+          
           rawText = rawText.replace(/\n/g, ' '); 
           dynamicDesc = rawText.length > 120 ? rawText.substring(0, 117) + '...' : rawText;
+          if (imageNote.renote) dynamicDesc = `🔄 ${dynamicDesc}`;
+          
+      } else {
+          // 策略2：没有图，退化为显示第一条“文字贴子”
+          const latest = allNotes[0].renote || allNotes[0];
+          let rawText = latest.isHtml ? latest.text.replace(/<[^>]+>/g, '') : (latest.text || '');
+          
+          if (rawText) {
+              rawText = rawText.replace(/\n/g, ' '); 
+              dynamicDesc = rawText.length > 120 ? rawText.substring(0, 117) + '...' : rawText;
+          }
+          // 图片保持默认的 CONFIG.SITE_ICON
       }
+      // --- 智能预览卡片逻辑 END ---
       
+      // 分类逻辑
       allNotes.forEach(note => {
         const target = note.renote || note;
         if (!target.user) return; 
@@ -174,9 +201,16 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
     <link rel="icon" href={CONFIG.SITE_ICON} />
     
     <meta name="description" content={dynamicDesc} />
+    
+    <meta property="og:type" content="website" />
     <meta property="og:title" content={PAGE_TITLE} />
     <meta property="og:description" content={dynamicDesc} />
-    <meta property="og:image" content={CONFIG.SITE_ICON} />
+    <meta property="og:image" content={dynamicImage} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={PAGE_TITLE} />
+    <meta name="twitter:description" content={dynamicDesc} />
+    <meta name="twitter:image" content={dynamicImage} />
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
@@ -204,12 +238,10 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
         .text-content p:last-child { margin-bottom: 0; }
         .text-content a { color: var(--link-color); text-decoration: none; }
         
-        /* 顶部导航 */
         .header-bar { position: fixed; top: 0; width: 70%; left: 50%; transform: translateX(-50%); height: 80px; padding: 0 30px; background: rgba(5,5,5,0.6); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); border-left: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; z-index: 50; box-sizing: border-box; gap: 20px; }
         .header-left { display: flex; flex-direction: column; justify-content: center; min-width: 150px; }
         h1 { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 10px rgba(0,0,0,0.5)); display: flex; align-items: center; }
         
-        /* 走马灯 */
         .header-marquee { flex: 1; overflow: hidden; position: relative; height: 40px; display: flex; align-items: center; mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
         .marquee-track { display: flex; gap: 40px; animation: marquee-scroll 25s linear infinite; width: max-content; }
         .header-marquee:hover .marquee-track { animation-play-state: paused; }
@@ -221,12 +253,10 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
         .status-badge { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--terminal-green); background: rgba(0, 0, 0, 0.3); padding: 4px 10px; border-radius: 4px; border: 1px solid var(--terminal-green); opacity: 0.8; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px); }
         .status-dot { width: 6px; height: 6px; background: var(--terminal-green); border-radius: 50%; box-shadow: 0 0 8px var(--terminal-green); animation: pulse 2s infinite; }
         
-        /* 顶部功能按钮 (RSS & GitHub) */
         .icon-btn { color: var(--text-sub); text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s; background: rgba(0,0,0,0.2); backdrop-filter: blur(4px); }
         .icon-btn:hover { border-color: var(--terminal-border); color: var(--terminal-green); background: rgba(255, 255, 255, 0.05); box-shadow: 0 0 10px rgba(57, 255, 20, 0.1); }
         .btn-icon-svg { width: 16px; height: 16px; fill: currentColor; }
 
-        /* 刷新悬浮按钮 (FAB) */
         .refresh-btn {
             position: fixed; bottom: 30px; right: 30px; 
             width: 50px; height: 50px; 
@@ -245,11 +275,10 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
             border-color: var(--terminal-green);
             color: var(--terminal-green);
             box-shadow: 0 0 15px rgba(57, 255, 20, 0.3);
-            transform: rotate(180deg) scale(1.1); /* 旋转动画 */
+            transform: rotate(180deg) scale(1.1); 
         }
         .refresh-icon { width: 24px; height: 24px; fill: currentColor; }
 
-        /* 布局 */
         .dashboard-container { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0; overflow: hidden; padding-top: 0; height: 100vh; width: 70%; margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
         .dashboard-container.one-col { grid-template-columns: 1fr; }
         .dashboard-container.one-col .column-left { border-right: none; }
@@ -261,7 +290,6 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
         .scroll-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
         .column-left { border-right: 1px solid rgba(255,255,255,0.05); }
 
-        /* 卡片 */
         .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; transition: all 0.2s ease; animation: fade-in-up 0.5s ease-out forwards; opacity: 0; }
         .card:hover { transform: translateY(-2px); border-color: var(--terminal-border); background: rgba(30, 30, 35, 0.8); }
         .user-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -303,7 +331,6 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
             .dashboard-container { display: block; padding-top: 0; height: auto !important; overflow: visible !important; width: 100%; margin: 0; border: none; }
             .scroll-column { height: auto !important; overflow: visible !important; padding: 100px 15px 40px 15px !important; }
             .column-left { border-right: none; border-bottom: 1px solid var(--border); }
-            /* 移动端刷新按钮稍微往上一点，防止遮挡底部 */
             .refresh-btn { bottom: 20px; right: 20px; width: 45px; height: 45px; }
         }
     </style>
@@ -315,14 +342,12 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
         <div class="header-right">
             <div class="status-badge"><span class="status-dot"></span>SYSTEM ONLINE</div>
             
-            {/* GitHub 按钮 */}
             <a href="https://github.com/Ghfftn/misskey-blog" target="_blank" class="icon-btn" title="Source Code">
                 <svg class="btn-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                 </svg>
             </a>
 
-            {/* RSS 按钮 */}
             <a href="/rss.xml" class="icon-btn" target="_blank" title="Subscribe">
                 <svg class="btn-icon-svg" viewBox="0 0 24 24"><path d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19 7.38 20 6.18 20C5 20 4 19 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1Z"/></svg>
                 RSS
@@ -331,7 +356,6 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
     </header>
 
     <main class={`dashboard-container ${singleColumnMode ? 'one-col' : ''}`} id="main-container">
-        {/* 服务端渲染区 */}
         {errorMsg === '' ? (
             <>
                 <div class={`scroll-column column-left ${!hasMedia ? 'hidden-col' : ''}`}>
@@ -385,7 +409,6 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
                 </div>
             </>
         ) : (
-            /* 客户端救援等待区 */
             <div id="client-fallback-area">
                 <div class="error-message" style="display:none;" id="final-error">
                     <strong>⚠️ {errorMsg}</strong>
@@ -400,7 +423,6 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
     
     <div id="lightbox"><div class="spinner"></div><img id="lightbox-img" src="" alt="Full view" /></div>
     
-    {/* 右下角刷新按钮 */}
     <button id="refresh-btn" class="refresh-btn" title="Refresh Page">
         <svg class="refresh-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
@@ -408,7 +430,6 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
     </button>
     
     <script define:vars={{ USER_NAME, INSTANCE_URL, DOMAIN, serverError: errorMsg }}>
-        // 绑定刷新按钮功能
         document.getElementById('refresh-btn').addEventListener('click', () => {
             location.reload();
         });
