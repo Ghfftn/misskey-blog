@@ -23,7 +23,7 @@ let mediaNotes = [];
 let textNotes = [];
 let errorMsg = '';
 let dynamicDesc = CONFIG.SITE_DESC; 
-let dynamicImage = CONFIG.SITE_ICON; // 默认使用站点图标
+let dynamicImage = CONFIG.SITE_ICON; // 默认用头像，稍后尝试替换为贴子图片
 let platform = 'unknown'; 
 let userId = null; 
 
@@ -43,7 +43,7 @@ const normalizeMastodon = (status) => {
         files: (status.media_attachments || []).map(m => ({
             type: m.type, 
             url: m.url,
-            thumbnailUrl: m.preview_url || m.url,
+            thumbnailUrl: m.preview_url || m.url, // 优先用缩略图
             description: m.description 
         })),
         replyId: status.in_reply_to_id,
@@ -131,47 +131,43 @@ const formatDate = (isoString) => {
 };
 
 // ==============================================
-// 2. 数据处理与执行 (智能 SEO 生成)
+// 2. 数据处理与执行 (预览图逻辑优化)
 // ==============================================
 try {
   const allNotes = await fetchFediverseData();
   if (!allNotes || allNotes.length === 0) {
       errorMsg = 'No public posts found (Server-side)';
   } else {
-      // --- 智能预览卡片逻辑 START ---
+      // --- 智能预览卡片逻辑 ---
       
-      // 策略1：优先寻找最新的“带图贴子”
+      // 1. 尝试找一张图
       const imageNote = allNotes.find(n => {
           const target = n.renote || n;
           return target.files && target.files.length > 0;
       });
 
       if (imageNote) {
-          // 找到了带图的贴子！用它的图和文
+          // 找到了带图的贴子，把它的图片设为分享封面
           const target = imageNote.renote || imageNote;
-          dynamicImage = target.files[0].thumbnailUrl || target.files[0].url; // 使用第一张图
+          dynamicImage = target.files[0].thumbnailUrl || target.files[0].url;
           
           let rawText = target.isHtml ? target.text.replace(/<[^>]+>/g, '') : (target.text || '');
-          if (!rawText) rawText = `[分享了 ${target.files.length} 张图片]`;
-          
+          if (!rawText) rawText = `[Shared images]`;
           rawText = rawText.replace(/\n/g, ' '); 
           dynamicDesc = rawText.length > 120 ? rawText.substring(0, 117) + '...' : rawText;
           if (imageNote.renote) dynamicDesc = `🔄 ${dynamicDesc}`;
-          
+
       } else {
-          // 策略2：没有图，退化为显示第一条“文字贴子”
+          // 没图，只更新文字描述
           const latest = allNotes[0].renote || allNotes[0];
           let rawText = latest.isHtml ? latest.text.replace(/<[^>]+>/g, '') : (latest.text || '');
-          
           if (rawText) {
               rawText = rawText.replace(/\n/g, ' '); 
               dynamicDesc = rawText.length > 120 ? rawText.substring(0, 117) + '...' : rawText;
           }
-          // 图片保持默认的 CONFIG.SITE_ICON
       }
-      // --- 智能预览卡片逻辑 END ---
+      // --- 逻辑结束 ---
       
-      // 分类逻辑
       allNotes.forEach(note => {
         const target = note.renote || note;
         if (!target.user) return; 
@@ -257,26 +253,8 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
         .icon-btn:hover { border-color: var(--terminal-border); color: var(--terminal-green); background: rgba(255, 255, 255, 0.05); box-shadow: 0 0 10px rgba(57, 255, 20, 0.1); }
         .btn-icon-svg { width: 16px; height: 16px; fill: currentColor; }
 
-        .refresh-btn {
-            position: fixed; bottom: 30px; right: 30px; 
-            width: 50px; height: 50px; 
-            border-radius: 50%; 
-            background: rgba(20, 20, 23, 0.7); 
-            border: 1px solid rgba(255, 255, 255, 0.15); 
-            color: var(--text-sub); 
-            cursor: pointer; 
-            backdrop-filter: blur(10px); 
-            display: flex; align-items: center; justify-content: center; 
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); 
-            z-index: 100;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        }
-        .refresh-btn:hover {
-            border-color: var(--terminal-green);
-            color: var(--terminal-green);
-            box-shadow: 0 0 15px rgba(57, 255, 20, 0.3);
-            transform: rotate(180deg) scale(1.1); 
-        }
+        .refresh-btn { position: fixed; bottom: 30px; right: 30px; width: 50px; height: 50px; border-radius: 50%; background: rgba(20, 20, 23, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); color: var(--text-sub); cursor: pointer; backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .refresh-btn:hover { border-color: var(--terminal-green); color: var(--terminal-green); box-shadow: 0 0 15px rgba(57, 255, 20, 0.3); transform: rotate(180deg) scale(1.1); }
         .refresh-icon { width: 24px; height: 24px; fill: currentColor; }
 
         .dashboard-container { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 0; overflow: hidden; padding-top: 0; height: 100vh; width: 70%; margin: 0 auto; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
@@ -304,9 +282,12 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
         .media-item { width: 100%; height: 200px; object-fit: cover; cursor: zoom-in; background: #222; transition: opacity 0.2s; }
         .media-grid[data-count="1"] .media-item { height: auto; max-height: 650px; object-fit: cover; }
         .media-item:hover { opacity: 0.8; }
+        
         .card-footer { padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #666; font-family: 'JetBrains Mono', monospace; }
         .footer-right { display: flex; align-items: center; gap: 12px; }
+        /* 转发图标样式 */
         .renote-icon-svg { width: 16px; height: 16px; fill: var(--text-sub); opacity: 0.7; }
+        
         .original-link { color: #fff; text-decoration: none; font-weight: 600; padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,0.05); }
         .original-link:hover { background: var(--terminal-green); color: #000; }
         
@@ -361,6 +342,9 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
                 <div class={`scroll-column column-left ${!hasMedia ? 'hidden-col' : ''}`}>
                     {mediaNotes.map((note, index) => {
                         const target = note.renote || note;
+                        // 判定是否为转发
+                        const isRenote = !!note.renote;
+                        
                         return (
                             <article class="card" style={`animation-delay: ${index * 0.05}s`}>
                                 <div class="user-header">
@@ -379,6 +363,12 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
                                 <div class="card-footer">
                                     <span class="date">{formatDate(note.createdAt)}</span>
                                     <div class="footer-right">
+                                        {/* 恢复转发图标 */}
+                                        {isRenote && (
+                                            <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" title="Renote">
+                                                 <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                                            </svg>
+                                        )}
                                         <a href={platform === 'mastodon' ? `${INSTANCE_URL}/@${USER_NAME}/${note.id}` : `${INSTANCE_URL}/notes/${note.id}`} target="_blank" rel="noopener noreferrer" class="original-link">RAW ↗</a>
                                     </div>
                                 </div>
@@ -389,6 +379,9 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
                 <div class={`scroll-column column-right ${!hasText ? 'hidden-col' : ''}`}>
                     {textNotes.map((note, index) => {
                         const target = note.renote || note;
+                        // 判定是否为转发
+                        const isRenote = !!note.renote;
+                        
                         return (
                             <article class="card" style={`animation-delay: ${(index * 0.05) + 0.2}s`}>
                                 <div class="user-header">
@@ -400,6 +393,12 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
                                 <div class="card-footer">
                                     <span class="date">{formatDate(note.createdAt)}</span>
                                     <div class="footer-right">
+                                        {/* 恢复转发图标 */}
+                                        {isRenote && (
+                                            <svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" title="Renote">
+                                                 <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                                            </svg>
+                                        )}
                                         <a href={platform === 'mastodon' ? `${INSTANCE_URL}/@${USER_NAME}/${note.id}` : `${INSTANCE_URL}/notes/${note.id}`} target="_blank" rel="noopener noreferrer" class="original-link">RAW ↗</a>
                                     </div>
                                 </div>
@@ -490,12 +489,20 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
                 
                 const renderCard = (note) => {
                     const target = note.renote || note;
+                    // 客户端也需要判定转发
+                    const isRenote = !!note.renote;
+
                     const mediaHtml = target.files && target.files.length ? 
                         `<div class="media-grid" data-count="${target.files.length}">
                             ${target.files.map(f => `<img src="${f.thumbnailUrl}" class="media-item" data-full-src="${f.url}" loading="lazy" alt="Media">`).join('')}
                         </div>` : '';
                     
                     const dateStr = new Date(note.createdAt).toLocaleDateString('zh-CN', {month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                    
+                    // 客户端渲染也加入图标
+                    const renoteIcon = isRenote ? 
+                        `<svg class="renote-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>` 
+                        : '';
 
                     return `
                     <article class="card" style="opacity:1; transform:translateY(0);">
@@ -506,7 +513,10 @@ const marqueeItems = [...CONFIG.THEME.MARQUEE_TEXT, ...CONFIG.THEME.MARQUEE_TEXT
                         <div class="text-content">${target.text}</div>
                         ${mediaHtml}
                         <div class="card-footer"><span class="date">${dateStr}</span>
-                        <div class="footer-right"><a href="${INSTANCE_URL}/${note.id}" target="_blank" rel="noopener noreferrer" class="original-link">RAW ↗</a></div></div>
+                        <div class="footer-right">
+                            ${renoteIcon}
+                            <a href="${INSTANCE_URL}/${note.id}" target="_blank" rel="noopener noreferrer" class="original-link">RAW ↗</a>
+                        </div></div>
                     </article>`;
                 };
 
